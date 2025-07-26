@@ -99,6 +99,17 @@ export const useCreateRepository = () => {
     });
 };
 
+export const useImportRepository = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (data: { path: string; name?: string }) => apiClient.importRepository(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.repositories });
+        },
+    });
+};
+
 export const useDeleteRepository = () => {
     const queryClient = useQueryClient();
 

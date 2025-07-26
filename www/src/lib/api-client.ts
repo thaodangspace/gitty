@@ -67,6 +67,13 @@ class ApiClient {
         });
     }
 
+    async importRepository(data: { path: string; name?: string }): Promise<Repository> {
+        return this.request<Repository>('/repos/import', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    }
+
     async deleteRepository(id: string): Promise<void> {
         return this.request<void>(`/repos/${id}`, {
             method: 'DELETE',

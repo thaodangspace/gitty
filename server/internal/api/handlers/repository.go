@@ -409,6 +409,65 @@ func (h *RepositoryHandler) Push(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"message": "Push completed successfully"}`))
 }
 
+func (h *RepositoryHandler) ImportRepository(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Path string `json:"path"`
+		Name string `json:"name,omitempty"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Path == "" {
+		http.Error(w, "Repository path is required", http.StatusBadRequest)
+		return
+	}
+
+	// Check if path exists and is a Git repository
+	if !h.isGitRepository(req.Path) {
+		http.Error(w, "Path is not a valid Git repository", http.StatusBadRequest)
+		return
+	}
+
+	// Use the folder name as repository name if not provided
+	repoName := req.Name
+	if repoName == "" {
+		repoName = filepath.Base(req.Path)
+	}
+
+	// Generate a unique ID for the repository
+	repoID := repoName
+	counter := 1
+	for _, exists := h.repositories[repoID]; exists; _, exists = h.repositories[repoID] {
+		repoID = fmt.Sprintf("%s-%d", repoName, counter)
+		counter++
+	}
+
+	// Create repository record
+	repo := &models.Repository{
+		ID:        repoID,
+		Name:      repoName,
+		Path:      req.Path,
+		IsLocal:   true,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	// Get current branch
+	status, err := h.gitService.GetRepositoryStatus(req.Path)
+	if err == nil {
+		repo.CurrentBranch = status.Branch
+	}
+
+	h.repositories[repoID] = repo
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(repo)
+}
+
 func (h *RepositoryHandler) Pull(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	
