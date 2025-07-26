@@ -30,6 +30,7 @@ func NewRouter(dataPath string) *chi.Mux {
 		r.Route("/repos", func(r chi.Router) {
 			r.Get("/", repoHandler.ListRepositories)
 			r.Post("/", repoHandler.CreateRepository)
+			r.Post("/import", repoHandler.ImportRepository)
 			
 			r.Route("/{id}", func(r chi.Router) {
 				r.Get("/", repoHandler.GetRepository)

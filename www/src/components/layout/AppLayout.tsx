@@ -4,6 +4,7 @@ import Header from './Header';
 import Sidebar from './Sidebar';
 import MainContent from './MainContent';
 import StatusBar from './StatusBar';
+import ChooseRepositoryDialog from '@/components/repository/ChooseRepositoryDialog';
 import { useEffect } from 'react';
 import { useRepositories } from '@/hooks/api';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -16,7 +17,7 @@ export default function AppLayout() {
   const [globalLoading] = useAtom(globalLoadingAtom);
   
   // Initialize repositories on app load
-  const { data: repositories, error: repoError, isLoading } = useRepositories();
+  const { error: repoError } = useRepositories();
 
   useEffect(() => {
     if (repoError) {
@@ -59,6 +60,7 @@ export default function AppLayout() {
         </div>
       </div>
       <StatusBar />
+      <ChooseRepositoryDialog />
     </div>
   );
 }

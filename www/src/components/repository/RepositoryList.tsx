@@ -1,8 +1,8 @@
 import { useAtom } from 'jotai';
-import { selectedRepositoryAtom, selectedRepositoryIdAtom, showCreateRepositoryDialogAtom } from '@/store/atoms';
+import { selectedRepositoryAtom, selectedRepositoryIdAtom, showCreateRepositoryDialogAtom, showChooseRepositoryDialogAtom } from '@/store/atoms';
 import { useRepositories } from '@/hooks/api';
 import { Button } from '@/components/ui/button';
-import { Folder, Plus, GitBranch, Loader2 } from 'lucide-react';
+import { Folder, Plus, GitBranch, Loader2, FolderOpen } from 'lucide-react';
 import type { Repository } from '@/types/api';
 
 export default function RepositoryList() {
@@ -10,6 +10,7 @@ export default function RepositoryList() {
   const [selectedRepository, setSelectedRepository] = useAtom(selectedRepositoryAtom);
   const [, setSelectedRepositoryId] = useAtom(selectedRepositoryIdAtom);
   const [, setShowCreateDialog] = useAtom(showCreateRepositoryDialogAtom);
+  const [, setShowChooseDialog] = useAtom(showChooseRepositoryDialogAtom);
 
   if (isLoading) {
     return (
@@ -37,13 +38,22 @@ export default function RepositoryList() {
     setShowCreateDialog(true);
   };
 
+  const handleChooseRepository = () => {
+    setShowChooseDialog(true);
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-semibold">Repositories</h3>
-        <Button size="sm" variant="ghost" onClick={handleCreateRepository}>
-          <Plus className="h-4 w-4" />
-        </Button>
+        <div className="flex gap-1">
+          <Button size="sm" variant="ghost" onClick={handleChooseRepository} title="Import existing repository">
+            <FolderOpen className="h-4 w-4" />
+          </Button>
+          <Button size="sm" variant="ghost" onClick={handleCreateRepository} title="Create new repository">
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
       
       <div className="space-y-1">
@@ -51,13 +61,23 @@ export default function RepositoryList() {
           <div className="text-xs text-muted-foreground py-2 text-center">
             No repositories found
             <br />
-            <Button 
-              variant="link" 
-              className="text-xs p-0 h-auto"
-              onClick={handleCreateRepository}
-            >
-              Add your first repository
-            </Button>
+            <div className="flex flex-col gap-1 mt-2">
+              <Button 
+                variant="link" 
+                className="text-xs p-0 h-auto"
+                onClick={handleCreateRepository}
+              >
+                Create your first repository
+              </Button>
+              <span className="text-xs">or</span>
+              <Button 
+                variant="link" 
+                className="text-xs p-0 h-auto"
+                onClick={handleChooseRepository}
+              >
+                Import an existing repository
+              </Button>
+            </div>
           </div>
         ) : (
           repositories?.map((repo) => (

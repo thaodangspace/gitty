@@ -26,12 +26,13 @@ export const commitsAtom = atom<Commit[]>([]);
 export const currentBranchAtom = atom<string>('');
 
 // File tree state
-export const expandedDirectoriesAtom = atom<Set<string>>(new Set());
+export const expandedDirectoriesAtom = atom<Set<string>>(new Set<string>());
 export const fileTreeAtom = atom<any[]>([]);
 
 // UI state for repository operations
 export const isCreatingRepositoryAtom = atom<boolean>(false);
 export const showCreateRepositoryDialogAtom = atom<boolean>(false);
+export const showChooseRepositoryDialogAtom = atom<boolean>(false);
 export const showFolderSelectionDialogAtom = atom<boolean>(false);
 
 // Directory browsing state
