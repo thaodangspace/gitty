@@ -10,7 +10,7 @@ import type {
     DirectoryEntry,
 } from '../types/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8083/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE;
 
 class ApiClient {
     private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -122,6 +122,18 @@ class ApiClient {
     async pull(id: string): Promise<void> {
         return this.request<void>(`/repos/${id}/pull`, {
             method: 'POST',
+        });
+    }
+
+    async stageFile(id: string, filePath: string): Promise<void> {
+        return this.request<void>(`/repos/${id}/stage/${filePath}`, {
+            method: 'POST',
+        });
+    }
+
+    async unstageFile(id: string, filePath: string): Promise<void> {
+        return this.request<void>(`/repos/${id}/stage/${filePath}`, {
+            method: 'DELETE',
         });
     }
 

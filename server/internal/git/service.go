@@ -379,3 +379,58 @@ func (s *Service) Pull(repoPath string) error {
 
 	return nil
 }
+
+func (s *Service) StageFile(repoPath, filePath string) error {
+	repo, err := s.OpenRepository(repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	_, err = worktree.Add(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to stage file: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) UnstageFile(repoPath, filePath string) error {
+	repo, err := s.OpenRepository(repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	_, err = worktree.Reset(&git.ResetOptions{
+		Mode: git.MixedReset,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to unstage file: %w", err)
+	}
+
+	// Re-add all files except the one we want to unstage
+	status, err := worktree.Status()
+	if err != nil {
+		return fmt.Errorf("failed to get status: %w", err)
+	}
+
+	for file, fileStatus := range status {
+		if file != filePath && fileStatus.Staging != git.Unmodified {
+			_, err = worktree.Add(file)
+			if err != nil {
+				return fmt.Errorf("failed to re-stage file %s: %w", file, err)
+			}
+		}
+	}
+
+	return nil
+}

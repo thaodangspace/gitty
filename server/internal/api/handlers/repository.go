@@ -486,3 +486,43 @@ func (h *RepositoryHandler) Pull(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"message": "Pull completed successfully"}`))
 }
+
+func (h *RepositoryHandler) StageFile(w http.ResponseWriter, r *http.Request) {
+	repoID := chi.URLParam(r, "id")
+	filePath := chi.URLParam(r, "*")
+	
+	repo, exists := h.repositories[repoID]
+	if !exists {
+		http.Error(w, "Repository not found", http.StatusNotFound)
+		return
+	}
+
+	err := h.gitService.StageFile(repo.Path, filePath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to stage file: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"message": "File staged successfully"}`))
+}
+
+func (h *RepositoryHandler) UnstageFile(w http.ResponseWriter, r *http.Request) {
+	repoID := chi.URLParam(r, "id")
+	filePath := chi.URLParam(r, "*")
+	
+	repo, exists := h.repositories[repoID]
+	if !exists {
+		http.Error(w, "Repository not found", http.StatusNotFound)
+		return
+	}
+
+	err := h.gitService.UnstageFile(repo.Path, filePath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to unstage file: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"message": "File unstaged successfully"}`))
+}

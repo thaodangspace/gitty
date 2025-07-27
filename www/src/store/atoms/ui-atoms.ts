@@ -13,7 +13,26 @@ export const themeAtom = atom<Theme>('system');
 
 // File selection and search
 export const selectedFilesAtom = atom<string[]>([]);
+export const currentFilePathAtom = atom<string | null>(null);
 export const searchQueryAtom = atom<string>('');
+export const fileTreeExpandedAtom = atom<Set<string>>(new Set<string>());
+
+// Derived atom for the currently selected file
+export const currentSelectedFileAtom = atom(
+    (get) => {
+        const selectedFiles = get(selectedFilesAtom);
+        return selectedFiles.length > 0 ? selectedFiles[0] : null;
+    },
+    (_get, set, filePath: string | null) => {
+        if (filePath) {
+            set(selectedFilesAtom, [filePath]);
+            set(currentFilePathAtom, filePath);
+        } else {
+            set(selectedFilesAtom, []);
+            set(currentFilePathAtom, null);
+        }
+    }
+);
 
 // Modal and dialog state
 export const showSettingsDialogAtom = atom<boolean>(false);
