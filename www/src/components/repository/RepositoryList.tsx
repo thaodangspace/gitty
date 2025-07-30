@@ -14,16 +14,16 @@ export default function RepositoryList() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground p-2">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground p-3">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Loading repositories...
+        <span className="text-xs md:text-sm">Loading repositories...</span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-sm text-red-500 p-2">
+      <div className="text-sm text-red-500 p-3">
         Failed to load repositories
       </div>
     );
@@ -45,13 +45,25 @@ export default function RepositoryList() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold">Repositories</h3>
         <div className="flex gap-1">
-          <Button size="sm" variant="ghost" onClick={handleChooseRepository} title="Import existing repository">
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            onClick={handleChooseRepository} 
+            title="Import existing repository"
+            className="touch-target p-2"
+          >
             <FolderOpen className="h-4 w-4" />
           </Button>
-          <Button size="sm" variant="ghost" onClick={handleCreateRepository} title="Create new repository">
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            onClick={handleCreateRepository} 
+            title="Create new repository"
+            className="touch-target p-2"
+          >
             <Plus className="h-4 w-4" />
           </Button>
         </div>
@@ -59,13 +71,12 @@ export default function RepositoryList() {
       
       <div className="space-y-1">
         {repositories?.length === 0 ? (
-          <div className="text-xs text-muted-foreground py-2 text-center">
-            No repositories found
-            <br />
-            <div className="flex flex-col gap-1 mt-2">
+          <div className="text-xs text-muted-foreground py-3 text-center">
+            <p className="mb-2">No repositories found</p>
+            <div className="flex flex-col gap-2">
               <Button 
                 variant="link" 
-                className="text-xs p-0 h-auto"
+                className="text-xs p-0 h-auto touch-target"
                 onClick={handleCreateRepository}
               >
                 Create your first repository
@@ -73,7 +84,7 @@ export default function RepositoryList() {
               <span className="text-xs">or</span>
               <Button 
                 variant="link" 
-                className="text-xs p-0 h-auto"
+                className="text-xs p-0 h-auto touch-target"
                 onClick={handleChooseRepository}
               >
                 Import an existing repository
@@ -85,23 +96,23 @@ export default function RepositoryList() {
             <Button
               key={repo.id}
               variant={selectedRepository?.id === repo.id ? 'secondary' : 'ghost'}
-              className="w-full justify-start text-left h-auto p-2"
+              className="w-full justify-start text-left h-auto p-3 touch-target"
               onClick={() => handleRepositorySelect(repo)}
             >
-              <div className="flex items-start gap-2 w-full">
+              <div className="flex items-start gap-3 w-full">
                 <Folder className="h-4 w-4 mt-0.5 shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="font-medium text-sm truncate">
                     {repo.name}
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                     <GitBranch className="h-3 w-3" />
                     <span className="truncate">
                       {repo.current_branch || 'main'}
                     </span>
                   </div>
                   {repo.is_local && (
-                    <div className="text-xs text-blue-600">Local</div>
+                    <div className="text-xs text-blue-600 mt-1">Local</div>
                   )}
                 </div>
               </div>
