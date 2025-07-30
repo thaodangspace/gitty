@@ -12,7 +12,7 @@ func NewRouter(dataPath string) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173", "http://localhost:3000", "http://100.81.122.10:5174"},
+		AllowedOrigins:   []string{"http://localhost:5173", "http://localhost:3000", "http://100.81.122.10:5173"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
@@ -49,6 +49,8 @@ func NewRouter(dataPath string) *chi.Mux {
 				r.Get("/files", repoHandler.GetFileTree)
 				r.Get("/files/*", repoHandler.GetFileContent)
 				r.Put("/files/*", repoHandler.SaveFileContent)
+				
+				r.Get("/diff/*", repoHandler.GetFileDiff)
 				
 				r.Post("/stage/*", repoHandler.StageFile)
 				r.Delete("/stage/*", repoHandler.UnstageFile)

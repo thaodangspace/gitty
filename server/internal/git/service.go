@@ -306,6 +306,9 @@ func (s *Service) SaveFileContent(repoPath, filePath string, content []byte) err
 
 func (s *Service) GetFileTree(repoPath string) ([]models.FileInfo, error) {
 	var files []models.FileInfo
+	
+	// Initialize gitignore parser
+	gitignore := NewGitIgnore(repoPath)
 
 	err := filepath.WalkDir(repoPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -323,6 +326,14 @@ func (s *Service) GetFileTree(repoPath string) ([]models.FileInfo, error) {
 		relativePath, err := filepath.Rel(repoPath, path)
 		if err != nil {
 			return err
+		}
+
+		// Check if the file/directory should be ignored
+		if gitignore.IsIgnored(relativePath, d.IsDir()) {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
 		}
 
 		info, err := d.Info()
@@ -595,4 +606,189 @@ func (s *Service) DeleteBranch(repoPath, branchName string) error {
 	}
 
 	return nil
+}
+
+func (s *Service) GetFileDiff(repoPath, filePath string) (string, error) {
+	repo, err := s.OpenRepository(repoPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return "", fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	// Get the current status
+	status, err := worktree.Status()
+	if err != nil {
+		return "", fmt.Errorf("failed to get status: %w", err)
+	}
+
+	fileStatus, exists := status[filePath]
+	if !exists {
+		return "", fmt.Errorf("file not found in status: %s", filePath)
+	}
+
+	// Handle different file statuses
+	switch fileStatus.Worktree {
+	case git.Untracked:
+		// For untracked files, show the entire content as additions
+		content, err := os.ReadFile(filepath.Join(repoPath, filePath))
+		if err != nil {
+			return "", fmt.Errorf("failed to read file: %w", err)
+		}
+		
+		var diff strings.Builder
+		diff.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", filePath, filePath))
+		diff.WriteString("new file mode 100644\n")
+		diff.WriteString("index 0000000..0000000\n")
+		diff.WriteString("--- /dev/null\n")
+		diff.WriteString(fmt.Sprintf("+++ b/%s\n", filePath))
+		
+		lines := strings.Split(string(content), "\n")
+		if len(lines) > 0 {
+			diff.WriteString(fmt.Sprintf("@@ -0,0 +1,%d @@\n", len(lines)))
+			for _, line := range lines {
+				diff.WriteString("+" + line + "\n")
+			}
+		}
+		
+		return diff.String(), nil
+
+	case git.Modified, git.Added:
+		// Get HEAD commit
+		head, err := repo.Head()
+		if err != nil {
+			return "", fmt.Errorf("failed to get HEAD: %w", err)
+		}
+
+		commit, err := repo.CommitObject(head.Hash())
+		if err != nil {
+			return "", fmt.Errorf("failed to get commit: %w", err)
+		}
+
+		// Get the file from HEAD
+		tree, err := commit.Tree()
+		if err != nil {
+			return "", fmt.Errorf("failed to get tree: %w", err)
+		}
+
+		var oldContent string
+		file, err := tree.File(filePath)
+		if err != nil {
+			// File doesn't exist in HEAD (new file)
+			oldContent = ""
+		} else {
+			oldContent, err = file.Contents()
+			if err != nil {
+				return "", fmt.Errorf("failed to get file contents: %w", err)
+			}
+		}
+
+		// Get current file content
+		newContent, err := os.ReadFile(filepath.Join(repoPath, filePath))
+		if err != nil {
+			return "", fmt.Errorf("failed to read current file: %w", err)
+		}
+
+		// Generate diff
+		return s.generateTextDiff(filePath, oldContent, string(newContent)), nil
+
+	case git.Deleted:
+		// Get the file content from HEAD
+		head, err := repo.Head()
+		if err != nil {
+			return "", fmt.Errorf("failed to get HEAD: %w", err)
+		}
+
+		commit, err := repo.CommitObject(head.Hash())
+		if err != nil {
+			return "", fmt.Errorf("failed to get commit: %w", err)
+		}
+
+		tree, err := commit.Tree()
+		if err != nil {
+			return "", fmt.Errorf("failed to get tree: %w", err)
+		}
+
+		file, err := tree.File(filePath)
+		if err != nil {
+			return "", fmt.Errorf("failed to get deleted file: %w", err)
+		}
+
+		oldContent, err := file.Contents()
+		if err != nil {
+			return "", fmt.Errorf("failed to get file contents: %w", err)
+		}
+
+		return s.generateTextDiff(filePath, oldContent, ""), nil
+
+	default:
+		return "", fmt.Errorf("unsupported file status: %v", fileStatus.Worktree)
+	}
+}
+
+// generateTextDiff creates a unified diff between two text contents
+func (s *Service) generateTextDiff(filePath, oldContent, newContent string) string {
+	var diff strings.Builder
+	
+	diff.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", filePath, filePath))
+	diff.WriteString("index 0000000..0000000 100644\n")
+	diff.WriteString(fmt.Sprintf("--- a/%s\n", filePath))
+	diff.WriteString(fmt.Sprintf("+++ b/%s\n", filePath))
+	
+	oldLines := strings.Split(oldContent, "\n")
+	newLines := strings.Split(newContent, "\n")
+	
+	// Simple line-by-line diff (this could be improved with a proper diff algorithm)
+	maxLines := max(len(oldLines), len(newLines))
+	
+	if maxLines > 0 {
+		diff.WriteString(fmt.Sprintf("@@ -1,%d +1,%d @@\n", len(oldLines), len(newLines)))
+		
+		for i := 0; i < maxLines; i++ {
+			var oldLine, newLine string
+			
+			if i < len(oldLines) {
+				oldLine = oldLines[i]
+			}
+			if i < len(newLines) {
+				newLine = newLines[i]
+			}
+			
+			if i < len(oldLines) && i < len(newLines) {
+				if oldLine != newLine {
+					// Changed line
+					diff.WriteString("-" + oldLine + "\n")
+					diff.WriteString("+" + newLine + "\n")
+				} else {
+					// Unchanged line (context)
+					diff.WriteString(" " + oldLine + "\n")
+				}
+			} else if i < len(oldLines) {
+				// Deleted line
+				diff.WriteString("-" + oldLine + "\n")
+			} else if i < len(newLines) {
+				// Added line
+				diff.WriteString("+" + newLine + "\n")
+			}
+		}
+	}
+	
+	return diff.String()
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

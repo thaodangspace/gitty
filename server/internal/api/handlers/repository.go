@@ -579,3 +579,28 @@ func (h *RepositoryHandler) DeleteBranch(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"message": "Branch deleted successfully"}`))
 }
+
+func (h *RepositoryHandler) GetFileDiff(w http.ResponseWriter, r *http.Request) {
+	repoID := chi.URLParam(r, "id")
+	filePath := chi.URLParam(r, "*")
+	
+	repo, exists := h.repositories[repoID]
+	if !exists {
+		http.Error(w, "Repository not found", http.StatusNotFound)
+		return
+	}
+
+	if filePath == "" {
+		http.Error(w, "File path is required", http.StatusBadRequest)
+		return
+	}
+
+	diff, err := h.gitService.GetFileDiff(repo.Path, filePath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get file diff: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write([]byte(diff))
+}

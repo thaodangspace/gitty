@@ -61,17 +61,28 @@ export default function FileTreeBrowser({ onFileSelect }: FileTreeBrowserProps =
                 const isLast = index === pathParts.length - 1;
                 
                 if (isLast) {
-                    // This is the actual file/directory
-                    const node: TreeNode = {
-                        ...file,
-                        level: index,
-                        children: file.is_directory ? [] : undefined,
-                        isExpanded: expandedDirs.has(file.path)
-                    };
-                    currentLevel.push(node);
-                    map.set(file.path, node);
+                    // This is the actual file/directory from the backend
+                    // Check if a node with this path already exists (from intermediate directory creation)
+                    let existingNode = map.get(file.path);
+                    if (existingNode) {
+                        // Update the existing node with real data from backend
+                        existingNode.size = file.size;
+                        existingNode.mod_time = file.mod_time;
+                        existingNode.mode = file.mode;
+                        existingNode.level = index;
+                    } else {
+                        // Create new node
+                        const node: TreeNode = {
+                            ...file,
+                            level: index,
+                            children: file.is_directory ? [] : undefined,
+                            isExpanded: expandedDirs.has(file.path)
+                        };
+                        currentLevel.push(node);
+                        map.set(file.path, node);
+                    }
                 } else {
-                    // This is a parent directory we need to create
+                    // This is a parent directory we need to create if it doesn't exist
                     let existingNode = currentLevel.find(n => n.name === part);
                     if (!existingNode) {
                         existingNode = {

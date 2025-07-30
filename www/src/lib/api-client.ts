@@ -180,6 +180,17 @@ class ApiClient {
         });
     }
 
+    async getFileDiff(id: string, filePath: string): Promise<string> {
+        const response = await fetch(`${API_BASE_URL}/repos/${id}/diff/${filePath}`);
+        if (!response.ok) {
+            throw new ApiError({
+                message: `Failed to fetch diff: ${response.statusText}`,
+                status: response.status,
+            });
+        }
+        return response.text();
+    }
+
     // Filesystem browsing
     async browseDirectory(path?: string): Promise<DirectoryListing> {
         const url = path

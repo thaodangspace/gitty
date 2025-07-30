@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAtom } from 'jotai';
 import { showChooseRepositoryDialogAtom, currentDirectoryAtom } from '@/store/atoms';
 import { useDirectoryBrowse, useVolumeRoots, useImportRepository } from '@/hooks/api';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { 
   Folder, 
@@ -19,6 +20,7 @@ export default function ChooseRepositoryDialog() {
   const [currentDirectory, setCurrentDirectory] = useAtom(currentDirectoryAtom);
   const [selectedRepo, setSelectedRepo] = useState<DirectoryEntry | null>(null);
   const [customName, setCustomName] = useState('');
+  const isMobile = useIsMobile();
 
   const { data: directoryListing, isLoading, error } = useDirectoryBrowse(currentDirectory);
   const { data: volumeRoots } = useVolumeRoots();
@@ -74,14 +76,26 @@ export default function ChooseRepositoryDialog() {
   if (!showDialog) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 md:p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center md:p-4">
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/50" onClick={handleCancel} />
       
-      {/* Dialog */}
-      <div className="relative bg-background border rounded-lg shadow-lg w-full max-w-4xl h-[90vh] md:h-[700px] flex flex-col">
+      {/* Dialog - Bottom drawer on mobile, centered modal on desktop */}
+      <div className={`
+        relative bg-background border shadow-lg w-full flex flex-col
+        ${isMobile 
+          ? 'fixed bottom-0 left-0 right-0 h-[85vh] rounded-t-xl animate-in slide-in-from-bottom-full duration-300' 
+          : 'rounded-lg max-w-4xl h-[700px] animate-in fade-in-0 zoom-in-95 duration-200'
+        }
+      `}>
         {/* Header */}
         <div className="p-4 md:p-6 border-b">
+          {/* Mobile drag handle */}
+          {isMobile && (
+            <div className="flex justify-center mb-3">
+              <div className="w-12 h-1.5 bg-muted-foreground/30 rounded-full" />
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
               <h2 className="text-lg font-semibold">Choose Existing Repository</h2>

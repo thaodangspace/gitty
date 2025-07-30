@@ -1,2 +1,6 @@
 gitweb-server
 .serena
+node_modules/
+*.log
+dist/
+.DS_Store

@@ -19,6 +19,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import CommitDialog from './CommitDialog';
+import DiffViewer from '../file/DiffViewer';
 
 const getStatusIcon = (status: string) => {
     switch (status) {
@@ -72,25 +73,39 @@ interface FileChangeItemProps {
     isStaged?: boolean;
     onStage?: () => void;
     onUnstage?: () => void;
+    onViewDiff?: () => void;
 }
 
-function FileChangeItem({ file, isStaged = false, onStage, onUnstage }: FileChangeItemProps) {
+function FileChangeItem({ file, isStaged = false, onStage, onUnstage, onViewDiff }: FileChangeItemProps) {
     return (
         <div className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors">
             <div className="flex-shrink-0">
                 {getStatusIcon(file.status)}
             </div>
             
-            <div className="flex-1 min-w-0">
+            <div 
+                className="flex-1 min-w-0 cursor-pointer" 
+                onClick={onViewDiff}
+                title="Click to view changes"
+            >
                 <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm truncate">{file.path}</span>
+                    <span className="font-medium text-sm truncate hover:text-primary">{file.path}</span>
                     <Badge variant="outline" className={`h-5 text-xs ${getStatusColor(file.status)}`}>
                         {getStatusText(file.status)}
                     </Badge>
                 </div>
             </div>
             
-            <div className="flex-shrink-0">
+            <div className="flex-shrink-0 flex items-center gap-1">
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onViewDiff}
+                    className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                    title="View changes"
+                >
+                    <FileText className="h-3 w-3" />
+                </Button>
                 {isStaged ? (
                     <Button
                         variant="ghost"
@@ -159,6 +174,7 @@ export default function WorkingDirectoryChanges() {
     const stageFileMutation = useStageFile();
     const unstageFileMutation = useUnstageFile();
     const [showCommitDialog, setShowCommitDialog] = useState(false);
+    const [selectedDiffFile, setSelectedDiffFile] = useState<{ path: string; name: string } | null>(null);
 
     // Debug logging
     console.log('WorkingDirectoryChanges - currentRepository:', currentRepository);
@@ -182,6 +198,11 @@ export default function WorkingDirectoryChanges() {
             repositoryId: currentRepository.id,
             filePath,
         });
+    };
+
+    const handleViewDiff = (filePath: string) => {
+        const fileName = filePath.split('/').pop() || filePath;
+        setSelectedDiffFile({ path: filePath, name: fileName });
     };
 
     if (isLoading) {
@@ -269,6 +290,7 @@ export default function WorkingDirectoryChanges() {
                                         file={file}
                                         isStaged={true}
                                         onUnstage={() => handleUnstageFile(file.path)}
+                                        onViewDiff={() => handleViewDiff(file.path)}
                                     />
                                 ))}
                             </div>
@@ -291,6 +313,7 @@ export default function WorkingDirectoryChanges() {
                                         file={file}
                                         isStaged={false}
                                         onStage={() => handleStageFile(file.path)}
+                                        onViewDiff={() => handleViewDiff(file.path)}
                                     />
                                 ))}
                             </div>
@@ -350,6 +373,16 @@ export default function WorkingDirectoryChanges() {
                 open={showCommitDialog} 
                 onOpenChange={setShowCommitDialog} 
             />
+
+            {/* Diff Viewer */}
+            {selectedDiffFile && currentRepository && (
+                <DiffViewer
+                    repositoryId={currentRepository.id}
+                    filePath={selectedDiffFile.path}
+                    fileName={selectedDiffFile.name}
+                    onClose={() => setSelectedDiffFile(null)}
+                />
+            )}
         </div>
     );
 }
