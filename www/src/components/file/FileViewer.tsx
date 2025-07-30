@@ -1,5 +1,5 @@
 import { useAtom } from 'jotai';
-import { selectedRepositoryFromListAtom, selectedFilesAtom } from '@/store/atoms';
+import { selectedRepositoryAtom, selectedFilesAtom } from '@/store/atoms';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
@@ -70,7 +70,7 @@ const isImageFile = (fileName: string): boolean => {
 
 
 export default function FileViewer() {
-    const [currentRepository] = useAtom(selectedRepositoryFromListAtom);
+    const [currentRepository] = useAtom(selectedRepositoryAtom);
     const [selectedFiles] = useAtom(selectedFilesAtom);
 
     const selectedFile = selectedFiles[0]; // For now, just show the first selected file

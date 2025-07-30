@@ -11,11 +11,12 @@ import type {
     DirectoryEntry,
 } from '../types/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE;
+const API_BASE_URL = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 
 class ApiClient {
     private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
         const url = `${API_BASE_URL}${endpoint}`;
+        console.log('API Client - Making request to:', url);
 
         const config: RequestInit = {
             headers: {
@@ -27,9 +28,11 @@ class ApiClient {
 
         try {
             const response = await fetch(url, config);
+            console.log('API Client - Response status:', response.status);
 
             if (!response.ok) {
                 const errorText = await response.text();
+                console.error('API Client - Error response:', errorText);
                 throw new ApiError({
                     message: errorText || `HTTP ${response.status}: ${response.statusText}`,
                     status: response.status,
@@ -40,8 +43,11 @@ class ApiClient {
                 return {} as T;
             }
 
-            return await response.json();
+            const data = await response.json();
+            console.log('API Client - Response data:', data);
+            return data;
         } catch (error) {
+            console.error('API Client - Request failed:', error);
             if (error instanceof ApiError) {
                 throw error;
             }

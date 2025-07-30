@@ -30,6 +30,7 @@ export default function RepositoryList() {
   }
 
   const handleRepositorySelect = (repo: Repository) => {
+    console.log('RepositoryList - selecting repository:', repo);
     setSelectedRepository(repo);
     setSelectedRepositoryId(repo.id);
   };
