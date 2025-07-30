@@ -1,6 +1,6 @@
 import { atom } from 'jotai';
 
-export type ActiveView = 'files' | 'history' | 'branches' | 'settings' | 'status';
+export type ActiveView = 'files' | 'history' | 'tree' | 'branches' | 'settings' | 'status';
 export type Theme = 'light' | 'dark' | 'system';
 
 // Layout state

@@ -3,6 +3,7 @@ import { useAtom } from 'jotai';
 import { selectedRepositoryAtom, selectedFilesAtom } from '@/store/atoms';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { 
     ChevronRight, 
@@ -15,16 +16,21 @@ import {
 } from 'lucide-react';
 import type { FileInfo } from '@/types/api';
 
+interface FileTreeBrowserProps {
+    onFileSelect?: () => void;
+}
+
 interface TreeNode extends FileInfo {
     children?: TreeNode[];
     isExpanded?: boolean;
     level: number;
 }
 
-export default function FileTreeBrowser() {
+export default function FileTreeBrowser({ onFileSelect }: FileTreeBrowserProps = {}) {
     const [currentRepository] = useAtom(selectedRepositoryAtom);
     const [selectedFiles, setSelectedFiles] = useAtom(selectedFilesAtom);
     const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
+    const isMobile = useIsMobile();
 
     const { data: files, isLoading, error } = useQuery({
         queryKey: ['file-tree', currentRepository?.id],
@@ -107,6 +113,10 @@ export default function FileTreeBrowser() {
             toggleDirectory(file.path);
         } else {
             setSelectedFiles([file.path]);
+            // Close mobile drawer when file is selected
+            if (isMobile && onFileSelect) {
+                onFileSelect();
+            }
         }
     };
 
@@ -119,6 +129,7 @@ export default function FileTreeBrowser() {
                 <div
                     className={`flex items-center py-1 px-2 hover:bg-muted/50 cursor-pointer text-sm
                         ${isSelected ? 'bg-primary/10 text-primary' : ''}
+                        ${isMobile ? 'touch-target py-3' : ''}
                     `}
                     style={{ paddingLeft }}
                     onClick={() => selectFile(node)}

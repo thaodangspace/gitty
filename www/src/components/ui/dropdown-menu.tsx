@@ -1,8 +1,15 @@
 import * as React from "react"
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react"
+import { 
+  DrawerContent, 
+  DrawerHeader, 
+  DrawerTitle,
+  DrawerDescription 
+} from "./drawer"
 
 import { cn } from "@/lib/utils"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 function DropdownMenu({
   ...props
@@ -34,6 +41,12 @@ function DropdownMenuContent({
   sideOffset = 4,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+  const isMobile = useIsMobile()
+
+  if (isMobile) {
+    return null // Mobile content will be handled by MobileDropdownContent
+  }
+
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content
@@ -46,6 +59,35 @@ function DropdownMenuContent({
         {...props}
       />
     </DropdownMenuPrimitive.Portal>
+  )
+}
+
+function MobileDropdownContent({
+  className,
+  children,
+  title,
+  description,
+  ...props
+}: React.ComponentProps<typeof DrawerContent> & {
+  title?: string
+  description?: string
+}) {
+  return (
+    <DrawerContent
+      data-slot="mobile-dropdown-content"
+      className={cn("p-0", className)}
+      {...props}
+    >
+      {(title || description) && (
+        <DrawerHeader className="text-left">
+          {title && <DrawerTitle>{title}</DrawerTitle>}
+          {description && <DrawerDescription>{description}</DrawerDescription>}
+        </DrawerHeader>
+      )}
+      <div className="px-4 pb-4">
+        {children}
+      </div>
+    </DrawerContent>
   )
 }
 
@@ -241,6 +283,7 @@ export {
   DropdownMenuPortal,
   DropdownMenuTrigger,
   DropdownMenuContent,
+  MobileDropdownContent,
   DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuItem,

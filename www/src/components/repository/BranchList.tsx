@@ -12,8 +12,11 @@ import {
     DialogDescription, 
     DialogFooter, 
     DialogHeader, 
-    DialogTitle 
+    DialogTitle,
+    MobileDialogContent
 } from '@/components/ui/dialog';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Drawer, DrawerTrigger } from '@/components/ui/drawer';
 import CreateBranchDialog from './CreateBranchDialog';
 
 export default function BranchList() {
@@ -23,6 +26,7 @@ export default function BranchList() {
     const [deleteBranchName, setDeleteBranchName] = useState<string | null>(null);
     const switchBranchMutation = useSwitchBranch();
     const deleteBranchMutation = useDeleteBranch();
+    const isMobile = useIsMobile();
 
     // Debug logging
     console.log('BranchList - currentRepository:', currentRepository);
@@ -252,38 +256,75 @@ export default function BranchList() {
                 onOpenChange={setShowCreateDialog} 
             />
             
-            <Dialog open={!!deleteBranchName} onOpenChange={() => setDeleteBranchName(null)}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Delete Branch</DialogTitle>
-                        <DialogDescription>
-                            Are you sure you want to delete the branch "{deleteBranchName}"? 
-                            This action cannot be undone.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button 
-                            variant="outline" 
-                            onClick={() => setDeleteBranchName(null)}
-                            disabled={deleteBranchMutation.isPending}
-                        >
-                            Cancel
-                        </Button>
-                        <Button 
-                            variant="destructive" 
-                            onClick={handleDeleteBranch}
-                            disabled={deleteBranchMutation.isPending}
-                        >
-                            {deleteBranchMutation.isPending ? (
-                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                            ) : (
-                                <Trash2 className="h-3 w-3 mr-1" />
-                            )}
-                            Delete Branch
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {isMobile ? (
+                <Drawer open={!!deleteBranchName} onOpenChange={() => setDeleteBranchName(null)}>
+                    <MobileDialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Delete Branch</DialogTitle>
+                            <DialogDescription>
+                                Are you sure you want to delete the branch "{deleteBranchName}"? 
+                                This action cannot be undone.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter className="mt-6">
+                            <Button 
+                                variant="outline" 
+                                onClick={() => setDeleteBranchName(null)}
+                                disabled={deleteBranchMutation.isPending}
+                                className="w-full"
+                            >
+                                Cancel
+                            </Button>
+                            <Button 
+                                variant="destructive" 
+                                onClick={handleDeleteBranch}
+                                disabled={deleteBranchMutation.isPending}
+                                className="w-full mt-2"
+                            >
+                                {deleteBranchMutation.isPending ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                )}
+                                Delete Branch
+                            </Button>
+                        </DialogFooter>
+                    </MobileDialogContent>
+                </Drawer>
+            ) : (
+                <Dialog open={!!deleteBranchName} onOpenChange={() => setDeleteBranchName(null)}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Delete Branch</DialogTitle>
+                            <DialogDescription>
+                                Are you sure you want to delete the branch "{deleteBranchName}"? 
+                                This action cannot be undone.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button 
+                                variant="outline" 
+                                onClick={() => setDeleteBranchName(null)}
+                                disabled={deleteBranchMutation.isPending}
+                            >
+                                Cancel
+                            </Button>
+                            <Button 
+                                variant="destructive" 
+                                onClick={handleDeleteBranch}
+                                disabled={deleteBranchMutation.isPending}
+                            >
+                                {deleteBranchMutation.isPending ? (
+                                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                ) : (
+                                    <Trash2 className="h-3 w-3 mr-1" />
+                                )}
+                                Delete Branch
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
         </div>
     );
 }

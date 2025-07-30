@@ -94,8 +94,9 @@ export default function AppLayout() {
 
         {/* Mobile Drawer */}
         {isMobile && (
-          <Drawer open={sidebarOpen} onOpenChange={setSidebarOpen} direction="left">
-            <DrawerContent className="h-full w-80 max-w-[80vw]">
+          <Drawer open={sidebarOpen} onOpenChange={setSidebarOpen} direction="bottom">
+            <DrawerContent className="max-h-[85vh] rounded-t-xl">
+              <div className="mx-auto w-12 h-1.5 flex-shrink-0 rounded-full bg-muted-foreground/20 mb-4 mt-2" />
               <Sidebar />
             </DrawerContent>
           </Drawer>
