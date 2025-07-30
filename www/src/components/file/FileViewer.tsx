@@ -108,7 +108,7 @@ export default function FileViewer() {
     const isImage = isImageFile(fileName);
 
     const renderFileHeader = () => (
-        <div className="border-b p-4">
+        <div className="border-b p-3">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     {getFileIcon(fileName)}
@@ -131,7 +131,7 @@ export default function FileViewer() {
                     </Button>
                 </div>
             </div>
-            <div className="mt-2 text-sm text-muted-foreground">
+            <div className="mt-1 text-sm text-muted-foreground">
                 Path: {selectedFile}
             </div>
         </div>
@@ -140,7 +140,7 @@ export default function FileViewer() {
     const renderTextContent = () => {
         if (isLoading) {
             return (
-                <div className="flex items-center justify-center h-32">
+                <div className="flex items-center justify-center h-24">
                     <div className="flex items-center gap-2 text-muted-foreground">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         <span>Loading file content...</span>
@@ -151,7 +151,7 @@ export default function FileViewer() {
 
         if (error) {
             return (
-                <div className="flex items-center justify-center h-32">
+                <div className="flex items-center justify-center h-24">
                     <div className="flex items-center gap-2 text-red-500">
                         <AlertCircle className="h-4 w-4" />
                         <span>Failed to load file content</span>
@@ -161,8 +161,8 @@ export default function FileViewer() {
         }
 
         return (
-            <div className="p-4">
-                <pre className="whitespace-pre-wrap text-sm font-mono bg-muted/30 p-4 rounded overflow-auto">
+            <div className="p-3">
+                <pre className="whitespace-pre-wrap text-sm font-mono bg-muted/30 p-3 rounded overflow-auto">
                     {fileContent}
                 </pre>
             </div>
@@ -170,7 +170,7 @@ export default function FileViewer() {
     };
 
     const renderImageContent = () => (
-        <div className="p-4 flex items-center justify-center">
+        <div className="p-3 flex items-center justify-center">
             <img 
                 src={`${import.meta.env.VITE_API_BASE}/repos/${currentRepository.id}/files/${selectedFile}`}
                 alt={fileName}
@@ -189,7 +189,7 @@ export default function FileViewer() {
     );
 
     const renderBinaryContent = () => (
-        <div className="p-4 flex items-center justify-center text-muted-foreground">
+        <div className="p-3 flex items-center justify-center text-muted-foreground">
             <div className="text-center">
                 {getFileIcon(fileName)}
                 <p className="mt-2">Binary file - cannot display content</p>
