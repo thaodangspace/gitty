@@ -1,11 +1,11 @@
 import { useAtom } from 'jotai';
-import { sidebarOpenAtom, selectedRepositoryFromListAtom, activeViewAtom } from '@/store/atoms';
+import { sidebarOpenAtom, selectedRepositoryAtom, activeViewAtom } from '@/store/atoms';
 import { Button } from '@/components/ui/button';
 import { Menu, GitBranch, FolderOpen, History, Settings, GitMerge, RefreshCw, GitCompare } from 'lucide-react';
 
 export default function Header() {
     const [sidebarOpen, setSidebarOpen] = useAtom(sidebarOpenAtom);
-    const [currentRepository] = useAtom(selectedRepositoryFromListAtom);
+    const [currentRepository] = useAtom(selectedRepositoryAtom);
     const [activeView, setActiveView] = useAtom(activeViewAtom);
 
     return (

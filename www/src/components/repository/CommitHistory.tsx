@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAtom } from 'jotai';
-import { selectedRepositoryFromListAtom } from '@/store/atoms';
+import { selectedRepositoryAtom } from '@/store/atoms';
 import { useCommitHistory } from '@/store/queries';
 import { format } from 'date-fns';
 import { GitCommit, User, Calendar, Hash } from 'lucide-react';
@@ -8,9 +8,15 @@ import { Button } from '@/components/ui/button';
 import CommitDetailsDialog from './CommitDetailsDialog';
 
 export default function CommitHistory() {
-    const [currentRepository] = useAtom(selectedRepositoryFromListAtom);
+    const [currentRepository] = useAtom(selectedRepositoryAtom);
     const { data: commits, isLoading, error } = useCommitHistory(currentRepository?.id);
     const [selectedCommitHash, setSelectedCommitHash] = useState<string | null>(null);
+
+    // Debug logging
+    console.log('CommitHistory - currentRepository:', currentRepository);
+    console.log('CommitHistory - commits:', commits);
+    console.log('CommitHistory - isLoading:', isLoading);
+    console.log('CommitHistory - error:', error);
 
     if (isLoading) {
         return (

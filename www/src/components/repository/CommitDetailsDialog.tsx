@@ -1,5 +1,5 @@
 import { useAtom } from 'jotai';
-import { selectedRepositoryFromListAtom } from '@/store/atoms';
+import { selectedRepositoryAtom } from '@/store/atoms';
 import { useCommitDetails } from '@/store/queries';
 import { format } from 'date-fns';
 import { GitCommit, User, Calendar, Hash, Plus, Minus, FileText, X } from 'lucide-react';
@@ -14,7 +14,7 @@ interface CommitDetailsDialogProps {
 }
 
 export default function CommitDetailsDialog({ commitHash, isOpen, onClose }: CommitDetailsDialogProps) {
-    const [currentRepository] = useAtom(selectedRepositoryFromListAtom);
+    const [currentRepository] = useAtom(selectedRepositoryAtom);
     const { data: commitDetails, isLoading, error } = useCommitDetails(currentRepository?.id, commitHash || undefined);
 
     const getChangeTypeColor = (changeType: string) => {

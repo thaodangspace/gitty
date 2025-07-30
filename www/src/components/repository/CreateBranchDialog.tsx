@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAtom } from 'jotai';
-import { selectedRepositoryFromListAtom } from '@/store/atoms';
+import { selectedRepositoryAtom } from '@/store/atoms';
 import { useCreateBranch } from '@/store/queries';
 import {
     Dialog,
@@ -20,7 +20,7 @@ interface CreateBranchDialogProps {
 }
 
 export default function CreateBranchDialog({ open, onOpenChange }: CreateBranchDialogProps) {
-    const [currentRepository] = useAtom(selectedRepositoryFromListAtom);
+    const [currentRepository] = useAtom(selectedRepositoryAtom);
     const [branchName, setBranchName] = useState('');
     const createBranchMutation = useCreateBranch();
 

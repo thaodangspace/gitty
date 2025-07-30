@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAtom } from 'jotai';
-import { selectedRepositoryFromListAtom } from '@/store/atoms';
+import { selectedRepositoryAtom } from '@/store/atoms';
 import { useBranches, useSwitchBranch, useDeleteBranch } from '@/store/queries';
 import { format } from 'date-fns';
 import { GitBranch, GitMerge, Plus, Check, Hash, User, Calendar, Loader2, Trash2 } from 'lucide-react';
@@ -17,12 +17,18 @@ import {
 import CreateBranchDialog from './CreateBranchDialog';
 
 export default function BranchList() {
-    const [currentRepository] = useAtom(selectedRepositoryFromListAtom);
+    const [currentRepository] = useAtom(selectedRepositoryAtom);
     const { data: branches, isLoading, error } = useBranches(currentRepository?.id);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [deleteBranchName, setDeleteBranchName] = useState<string | null>(null);
     const switchBranchMutation = useSwitchBranch();
     const deleteBranchMutation = useDeleteBranch();
+
+    // Debug logging
+    console.log('BranchList - currentRepository:', currentRepository);
+    console.log('BranchList - branches:', branches);
+    console.log('BranchList - isLoading:', isLoading);
+    console.log('BranchList - error:', error);
 
     if (isLoading) {
         return (

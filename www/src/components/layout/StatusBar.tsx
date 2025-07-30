@@ -1,10 +1,10 @@
 import { useAtom } from 'jotai';
-import { selectedRepositoryFromListAtom, statusMessageAtom, progressAtom } from '@/store/atoms';
+import { selectedRepositoryAtom, statusMessageAtom, progressAtom } from '@/store/atoms';
 import { useRepositoryStatus } from '@/store/queries';
 import { GitBranch, Circle, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export default function StatusBar() {
-    const [currentRepository] = useAtom(selectedRepositoryFromListAtom);
+    const [currentRepository] = useAtom(selectedRepositoryAtom);
     const [statusMessage] = useAtom(statusMessageAtom);
     const [progress] = useAtom(progressAtom);
     

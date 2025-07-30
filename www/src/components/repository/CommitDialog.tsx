@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAtom } from 'jotai';
-import { selectedRepositoryFromListAtom } from '@/store/atoms';
+import { selectedRepositoryAtom } from '@/store/atoms';
 import { useRepositoryStatus } from '@/store/queries';
 import {
     Dialog,
@@ -22,7 +22,7 @@ interface CommitDialogProps {
 }
 
 export default function CommitDialog({ open, onOpenChange }: CommitDialogProps) {
-    const [currentRepository] = useAtom(selectedRepositoryFromListAtom);
+    const [currentRepository] = useAtom(selectedRepositoryAtom);
     const { data: repoStatus } = useRepositoryStatus(currentRepository?.id);
     const [commitMessage, setCommitMessage] = useState('');
     const [authorName, setAuthorName] = useState('');

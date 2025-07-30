@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAtom } from 'jotai';
-import { selectedRepositoryFromListAtom } from '@/store/atoms';
+import { selectedRepositoryAtom } from '@/store/atoms';
 import { useRepositoryStatus, useStageFile, useUnstageFile } from '@/store/queries';
 import type { FileChange } from '@/types/api';
 import { 
@@ -154,11 +154,17 @@ function UntrackedFileItem({ fileName, onStage }: UntrackedFileItemProps) {
 }
 
 export default function WorkingDirectoryChanges() {
-    const [currentRepository] = useAtom(selectedRepositoryFromListAtom);
+    const [currentRepository] = useAtom(selectedRepositoryAtom);
     const { data: repoStatus, isLoading, error } = useRepositoryStatus(currentRepository?.id);
     const stageFileMutation = useStageFile();
     const unstageFileMutation = useUnstageFile();
     const [showCommitDialog, setShowCommitDialog] = useState(false);
+
+    // Debug logging
+    console.log('WorkingDirectoryChanges - currentRepository:', currentRepository);
+    console.log('WorkingDirectoryChanges - repoStatus:', repoStatus);
+    console.log('WorkingDirectoryChanges - isLoading:', isLoading);
+    console.log('WorkingDirectoryChanges - error:', error);
 
     const handleStageFile = (filePath: string) => {
         if (!currentRepository) return;

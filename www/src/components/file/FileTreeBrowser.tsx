@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAtom } from 'jotai';
-import { selectedRepositoryFromListAtom, selectedFilesAtom } from '@/store/atoms';
+import { selectedRepositoryAtom, selectedFilesAtom } from '@/store/atoms';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,7 @@ interface TreeNode extends FileInfo {
 }
 
 export default function FileTreeBrowser() {
-    const [currentRepository] = useAtom(selectedRepositoryFromListAtom);
+    const [currentRepository] = useAtom(selectedRepositoryAtom);
     const [selectedFiles, setSelectedFiles] = useAtom(selectedFilesAtom);
     const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
 

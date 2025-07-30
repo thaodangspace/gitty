@@ -1,5 +1,5 @@
 import { useAtom } from 'jotai';
-import { activeViewAtom, selectedRepositoryFromListAtom } from '@/store/atoms';
+import { activeViewAtom, selectedRepositoryAtom } from '@/store/atoms';
 import FileTreeBrowser from '../file/FileTreeBrowser';
 import FileViewer from '../file/FileViewer';
 import CommitHistory from './CommitHistory';
@@ -8,7 +8,11 @@ import WorkingDirectoryChanges from './WorkingDirectoryChanges';
 
 export default function RepositoryPanel() {
     const [activeView] = useAtom(activeViewAtom);
-    const [currentRepository] = useAtom(selectedRepositoryFromListAtom);
+    const [currentRepository] = useAtom(selectedRepositoryAtom);
+
+    // Debug logging
+    console.log('RepositoryPanel - currentRepository:', currentRepository);
+    console.log('RepositoryPanel - activeView:', activeView);
 
     if (!currentRepository) {
         return (
