@@ -1,13 +1,16 @@
+import { useState } from 'react';
 import { useAtom } from 'jotai';
 import { selectedRepositoryFromListAtom } from '@/store/atoms';
 import { useCommitHistory } from '@/store/queries';
 import { format } from 'date-fns';
 import { GitCommit, User, Calendar, Hash } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import CommitDetailsDialog from './CommitDetailsDialog';
 
 export default function CommitHistory() {
     const [currentRepository] = useAtom(selectedRepositoryFromListAtom);
     const { data: commits, isLoading, error } = useCommitHistory(currentRepository?.id);
+    const [selectedCommitHash, setSelectedCommitHash] = useState<string | null>(null);
 
     if (isLoading) {
         return (
@@ -89,7 +92,12 @@ export default function CommitHistory() {
                                                 <Hash className="h-3 w-3" />
                                                 <span>{commit.hash.substring(0, 7)}</span>
                                             </div>
-                                            <Button variant="ghost" size="sm" className="h-6 px-2">
+                                            <Button 
+                                                variant="ghost" 
+                                                size="sm" 
+                                                className="h-6 px-2"
+                                                onClick={() => setSelectedCommitHash(commit.hash)}
+                                            >
                                                 View
                                             </Button>
                                         </div>
@@ -100,6 +108,12 @@ export default function CommitHistory() {
                     ))}
                 </div>
             </div>
+            
+            <CommitDetailsDialog
+                commitHash={selectedCommitHash}
+                isOpen={!!selectedCommitHash}
+                onClose={() => setSelectedCommitHash(null)}
+            />
         </div>
     );
 }

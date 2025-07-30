@@ -94,3 +94,27 @@ export interface ApiError {
   message: string;
   status: number;
 }
+
+export interface CommitDetail {
+  hash: string;
+  message: string;
+  author: Author;
+  date: string;
+  parent_hash?: string;
+  changes: FileDiff[];
+  stats: DiffStats;
+}
+
+export interface FileDiff {
+  path: string;
+  change_type: string;
+  additions: number;
+  deletions: number;
+  patch: string;
+}
+
+export interface DiffStats {
+  additions: number;
+  deletions: number;
+  files_changed: number;
+}

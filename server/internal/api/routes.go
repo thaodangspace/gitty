@@ -12,7 +12,7 @@ func NewRouter(dataPath string) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173", "http://localhost:3000", "http://100.81.122.10:5173"},
+		AllowedOrigins:   []string{"http://localhost:5173", "http://localhost:3000", "http://100.81.122.10:5174"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
@@ -38,11 +38,13 @@ func NewRouter(dataPath string) *chi.Mux {
 				
 				r.Get("/status", repoHandler.GetRepositoryStatus)
 				r.Get("/commits", repoHandler.GetCommitHistory)
+				r.Get("/commits/{hash}", repoHandler.GetCommitDetails)
 				r.Get("/branches", repoHandler.GetBranches)
 				
 				r.Post("/commit", repoHandler.CreateCommit)
 				r.Post("/branches", repoHandler.CreateBranch)
 				r.Put("/branches/{branch}", repoHandler.SwitchBranch)
+				r.Delete("/branches/{branch}", repoHandler.DeleteBranch)
 				
 				r.Get("/files", repoHandler.GetFileTree)
 				r.Get("/files/*", repoHandler.GetFileContent)

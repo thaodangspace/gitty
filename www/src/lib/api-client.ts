@@ -3,6 +3,7 @@ import type {
     RepositoryStatus,
     Branch,
     Commit,
+    CommitDetail,
     FileInfo,
     CreateRepositoryRequest,
     CommitRequest,
@@ -89,6 +90,10 @@ class ApiClient {
         return this.request<Commit[]>(`/repos/${id}/commits?limit=${limit}`);
     }
 
+    async getCommitDetails(id: string, commitHash: string): Promise<CommitDetail> {
+        return this.request<CommitDetail>(`/repos/${id}/commits/${commitHash}`);
+    }
+
     async getBranches(id: string): Promise<Branch[]> {
         return this.request<Branch[]>(`/repos/${id}/branches`);
     }
@@ -110,6 +115,12 @@ class ApiClient {
     async switchBranch(id: string, branch: string): Promise<void> {
         return this.request<void>(`/repos/${id}/branches/${branch}`, {
             method: 'PUT',
+        });
+    }
+
+    async deleteBranch(id: string, branch: string): Promise<void> {
+        return this.request<void>(`/repos/${id}/branches/${branch}`, {
+            method: 'DELETE',
         });
     }
 

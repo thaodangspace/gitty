@@ -526,3 +526,56 @@ func (h *RepositoryHandler) UnstageFile(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"message": "File unstaged successfully"}`))
 }
+
+func (h *RepositoryHandler) GetCommitDetails(w http.ResponseWriter, r *http.Request) {
+	repoID := chi.URLParam(r, "id")
+	commitHash := chi.URLParam(r, "hash")
+	
+	repo, exists := h.repositories[repoID]
+	if !exists {
+		http.Error(w, "Repository not found", http.StatusNotFound)
+		return
+	}
+
+	if commitHash == "" {
+		http.Error(w, "Commit hash is required", http.StatusBadRequest)
+		return
+	}
+
+	commitDetail, err := h.gitService.GetCommitDetails(repo.Path, commitHash)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get commit details: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Update files changed count
+	commitDetail.Stats.FilesChanged = len(commitDetail.Changes)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(commitDetail)
+}
+
+func (h *RepositoryHandler) DeleteBranch(w http.ResponseWriter, r *http.Request) {
+	repoID := chi.URLParam(r, "id")
+	branchName := chi.URLParam(r, "branch")
+	
+	repo, exists := h.repositories[repoID]
+	if !exists {
+		http.Error(w, "Repository not found", http.StatusNotFound)
+		return
+	}
+
+	if branchName == "" {
+		http.Error(w, "Branch name is required", http.StatusBadRequest)
+		return
+	}
+
+	err := h.gitService.DeleteBranch(repo.Path, branchName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to delete branch: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"message": "Branch deleted successfully"}`))
+}

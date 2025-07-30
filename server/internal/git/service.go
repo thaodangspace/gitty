@@ -410,7 +410,7 @@ func (s *Service) UnstageFile(repoPath, filePath string) error {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
 
-	_, err = worktree.Reset(&git.ResetOptions{
+	err = worktree.Reset(&git.ResetOptions{
 		Mode: git.MixedReset,
 	})
 	if err != nil {
@@ -430,6 +430,168 @@ func (s *Service) UnstageFile(repoPath, filePath string) error {
 				return fmt.Errorf("failed to re-stage file %s: %w", file, err)
 			}
 		}
+	}
+
+	return nil
+}
+
+func (s *Service) GetCommitDetails(repoPath, commitHash string) (*models.CommitDetail, error) {
+	repo, err := s.OpenRepository(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	hash := plumbing.NewHash(commitHash)
+	commit, err := repo.CommitObject(hash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commit: %w", err)
+	}
+
+	// Get parent commit if exists
+	var parentCommit *object.Commit
+	if len(commit.ParentHashes) > 0 {
+		parentCommit, _ = repo.CommitObject(commit.ParentHashes[0])
+	}
+
+	// Get the file changes (diff)
+	var changes []models.FileDiff
+	var stats models.DiffStats
+
+	if parentCommit != nil {
+		// Compare with parent
+		parentTree, err := parentCommit.Tree()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get parent tree: %w", err)
+		}
+
+		commitTree, err := commit.Tree()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get commit tree: %w", err)
+		}
+
+		patch, err := parentTree.Patch(commitTree)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get patch: %w", err)
+		}
+
+		for _, filePatch := range patch.FilePatches() {
+			from, to := filePatch.Files()
+			
+			var filePath string
+			var changeType string
+			
+			if from == nil && to != nil {
+				// New file
+				filePath = to.Path()
+				changeType = "added"
+				stats.Additions += len(filePatch.Chunks())
+			} else if from != nil && to == nil {
+				// Deleted file
+				filePath = from.Path()
+				changeType = "deleted"
+				stats.Deletions += len(filePatch.Chunks())
+			} else if from != nil && to != nil {
+				// Modified file
+				filePath = to.Path()
+				changeType = "modified"
+				
+				// Count additions and deletions
+				for _, chunk := range filePatch.Chunks() {
+					switch chunk.Type() {
+					case 1: // Addition
+						stats.Additions++
+					case 2: // Deletion
+						stats.Deletions++
+					}
+				}
+			}
+
+			// Get patch content
+			patchContent := ""
+			if chunks := filePatch.Chunks(); len(chunks) > 0 {
+				var builder strings.Builder
+				for _, chunk := range chunks {
+					builder.WriteString(chunk.Content())
+				}
+				patchContent = builder.String()
+			}
+
+			changes = append(changes, models.FileDiff{
+				Path:       filePath,
+				ChangeType: changeType,
+				Additions:  0, // TODO: Calculate line-level stats
+				Deletions:  0, // TODO: Calculate line-level stats
+				Patch:      patchContent,
+			})
+		}
+	} else {
+		// Initial commit - all files are additions
+		tree, err := commit.Tree()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tree: %w", err)
+		}
+
+		err = tree.Files().ForEach(func(file *object.File) error {
+			changes = append(changes, models.FileDiff{
+				Path:       file.Name,
+				ChangeType: "added",
+				Additions:  0,
+				Deletions:  0,
+				Patch:      "",
+			})
+			stats.Additions++
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to iterate files: %w", err)
+		}
+	}
+
+	parentHash := ""
+	if len(commit.ParentHashes) > 0 {
+		parentHash = commit.ParentHashes[0].String()
+	}
+
+	return &models.CommitDetail{
+		Hash:    commit.Hash.String(),
+		Message: strings.TrimSpace(commit.Message),
+		Author: models.Author{
+			Name:  commit.Author.Name,
+			Email: commit.Author.Email,
+		},
+		Date:       commit.Author.When,
+		ParentHash: parentHash,
+		Changes:    changes,
+		Stats:      stats,
+	}, nil
+}
+
+func (s *Service) DeleteBranch(repoPath, branchName string) error {
+	repo, err := s.OpenRepository(repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Check if it's the current branch
+	head, err := repo.Head()
+	if err != nil {
+		return fmt.Errorf("failed to get HEAD: %w", err)
+	}
+
+	currentBranch := ""
+	if head.Name().IsBranch() {
+		currentBranch = head.Name().Short()
+	}
+
+	if currentBranch == branchName {
+		return fmt.Errorf("cannot delete current branch: %s", branchName)
+	}
+
+	// Delete the branch reference
+	branchRef := plumbing.NewBranchReferenceName(branchName)
+	err = repo.Storer.RemoveReference(branchRef)
+	if err != nil {
+		return fmt.Errorf("failed to delete branch: %w", err)
 	}
 
 	return nil

@@ -116,3 +116,27 @@ type DirectoryListing struct {
 	Entries     []DirectoryEntry `json:"entries"`
 	CanGoUp     bool             `json:"can_go_up"`
 }
+
+type CommitDetail struct {
+	Hash       string     `json:"hash"`
+	Message    string     `json:"message"`
+	Author     Author     `json:"author"`
+	Date       time.Time  `json:"date"`
+	ParentHash string     `json:"parent_hash,omitempty"`
+	Changes    []FileDiff `json:"changes"`
+	Stats      DiffStats  `json:"stats"`
+}
+
+type FileDiff struct {
+	Path       string `json:"path"`
+	ChangeType string `json:"change_type"`
+	Additions  int    `json:"additions"`
+	Deletions  int    `json:"deletions"`
+	Patch      string `json:"patch"`
+}
+
+type DiffStats struct {
+	Additions    int `json:"additions"`
+	Deletions    int `json:"deletions"`
+	FilesChanged int `json:"files_changed"`
+}

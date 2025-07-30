@@ -92,7 +92,7 @@
 ### History & Visualization
 
 -   [x] Commit history display
--   [ ] Commit details view
+-   [x] Commit details view
 -   [ ] Branch visualization
 -   [ ] Git log integration
 
@@ -101,14 +101,14 @@
 -   [x] Branch list display
 -   [x] Branch creation
 -   [x] Branch switching
--   [ ] Branch deletion
+-   [x] Branch deletion
 
 ### Changes & Staging
 
 -   [x] Working directory changes view
 -   [x] Staging area interface
 -   [x] Commit creation dialog
--   [ ] Diff viewer implementation
+-   [x] Diff viewer implementation
 
 ### Remote Operations
 

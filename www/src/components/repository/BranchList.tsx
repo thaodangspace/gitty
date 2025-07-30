@@ -1,18 +1,28 @@
 import { useState } from 'react';
 import { useAtom } from 'jotai';
 import { selectedRepositoryFromListAtom } from '@/store/atoms';
-import { useBranches, useSwitchBranch } from '@/store/queries';
+import { useBranches, useSwitchBranch, useDeleteBranch } from '@/store/queries';
 import { format } from 'date-fns';
-import { GitBranch, GitMerge, Plus, Check, Hash, User, Calendar, Loader2 } from 'lucide-react';
+import { GitBranch, GitMerge, Plus, Check, Hash, User, Calendar, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { 
+    Dialog, 
+    DialogContent, 
+    DialogDescription, 
+    DialogFooter, 
+    DialogHeader, 
+    DialogTitle 
+} from '@/components/ui/dialog';
 import CreateBranchDialog from './CreateBranchDialog';
 
 export default function BranchList() {
     const [currentRepository] = useAtom(selectedRepositoryFromListAtom);
     const { data: branches, isLoading, error } = useBranches(currentRepository?.id);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
+    const [deleteBranchName, setDeleteBranchName] = useState<string | null>(null);
     const switchBranchMutation = useSwitchBranch();
+    const deleteBranchMutation = useDeleteBranch();
 
     if (isLoading) {
         return (
@@ -51,6 +61,19 @@ export default function BranchList() {
         switchBranchMutation.mutate({
             repositoryId: currentRepository.id,
             branchName,
+        });
+    };
+
+    const handleDeleteBranch = () => {
+        if (!currentRepository || !deleteBranchName) return;
+        
+        deleteBranchMutation.mutate({
+            repositoryId: currentRepository.id,
+            branchName: deleteBranchName,
+        }, {
+            onSuccess: () => {
+                setDeleteBranchName(null);
+            }
         });
     };
 
@@ -95,9 +118,6 @@ export default function BranchList() {
                                     <div className="flex gap-2">
                                         <Button variant="outline" size="sm" disabled>
                                             Switch to
-                                        </Button>
-                                        <Button variant="ghost" size="sm">
-                                            ⋮
                                         </Button>
                                     </div>
                                 </div>
@@ -172,8 +192,14 @@ export default function BranchList() {
                                                     ) : null}
                                                     Switch to
                                                 </Button>
-                                                <Button variant="ghost" size="sm">
-                                                    ⋮
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="sm"
+                                                    onClick={() => setDeleteBranchName(branch.name)}
+                                                    disabled={deleteBranchMutation.isPending}
+                                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                >
+                                                    <Trash2 className="h-3 w-3" />
                                                 </Button>
                                             </div>
                                         </div>
@@ -219,6 +245,39 @@ export default function BranchList() {
                 open={showCreateDialog} 
                 onOpenChange={setShowCreateDialog} 
             />
+            
+            <Dialog open={!!deleteBranchName} onOpenChange={() => setDeleteBranchName(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete Branch</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to delete the branch "{deleteBranchName}"? 
+                            This action cannot be undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button 
+                            variant="outline" 
+                            onClick={() => setDeleteBranchName(null)}
+                            disabled={deleteBranchMutation.isPending}
+                        >
+                            Cancel
+                        </Button>
+                        <Button 
+                            variant="destructive" 
+                            onClick={handleDeleteBranch}
+                            disabled={deleteBranchMutation.isPending}
+                        >
+                            {deleteBranchMutation.isPending ? (
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            ) : (
+                                <Trash2 className="h-3 w-3 mr-1" />
+                            )}
+                            Delete Branch
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

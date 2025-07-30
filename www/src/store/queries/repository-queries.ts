@@ -49,6 +49,14 @@ export const useCommitHistory = (id: string | undefined, limit = 50) => {
     });
 };
 
+export const useCommitDetails = (id: string | undefined, commitHash: string | undefined) => {
+    return useQuery({
+        queryKey: ['commit-details', id, commitHash],
+        queryFn: () => apiClient.getCommitDetails(id!, commitHash!),
+        enabled: !!id && !!commitHash,
+    });
+};
+
 export const useBranches = (id: string | undefined) => {
     return useQuery({
         queryKey: ['branches', id],
@@ -80,6 +88,19 @@ export const useSwitchBranch = () => {
             queryClient.invalidateQueries({ queryKey: ['branches', variables.repositoryId] });
             queryClient.invalidateQueries({ queryKey: ['repository-status', variables.repositoryId] });
             queryClient.invalidateQueries({ queryKey: ['repository', variables.repositoryId] });
+        },
+    });
+};
+
+export const useDeleteBranch = () => {
+    const queryClient = useQueryClient();
+    
+    return useMutation({
+        mutationFn: ({ repositoryId, branchName }: { repositoryId: string; branchName: string }) =>
+            apiClient.deleteBranch(repositoryId, branchName),
+        onSuccess: (_data, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['branches', variables.repositoryId] });
+            queryClient.invalidateQueries({ queryKey: ['repository-status', variables.repositoryId] });
         },
     });
 };
