@@ -5,16 +5,18 @@ import Sidebar from './Sidebar';
 import MainContent from './MainContent';
 import StatusBar from './StatusBar';
 import ChooseRepositoryDialog from '@/components/repository/ChooseRepositoryDialog';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRepositories } from '@/hooks/api';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2 } from 'lucide-react';
+import { Drawer, DrawerContent } from '@/components/ui/drawer';
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useAtom(sidebarOpenAtom);
   const [sidebarWidth] = useAtom(sidebarWidthAtom);
   const [globalError, setGlobalError] = useAtom(globalErrorAtom);
   const [globalLoading] = useAtom(globalLoadingAtom);
+  const [isMobile, setIsMobile] = useState(false);
   
   // Initialize repositories on app load
   const { error: repoError } = useRepositories();
@@ -25,17 +27,29 @@ export default function AppLayout() {
     }
   }, [repoError, setGlobalError]);
 
+  // Track mobile state
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   // Handle mobile sidebar events
   useEffect(() => {
     const handleCloseSidebar = () => {
-      if (window.innerWidth < 768) {
+      if (isMobile) {
         setSidebarOpen(false);
       }
     };
 
     const handleResize = () => {
       // Auto-close sidebar on mobile when screen gets smaller
-      if (window.innerWidth < 768 && sidebarOpen) {
+      if (isMobile && sidebarOpen) {
         setSidebarOpen(false);
       }
     };
@@ -47,14 +61,7 @@ export default function AppLayout() {
       window.removeEventListener('closeSidebar', handleCloseSidebar);
       window.removeEventListener('resize', handleResize);
     };
-  }, [sidebarOpen, setSidebarOpen]);
-
-  // Close sidebar on mobile when clicking outside
-  const handleOverlayClick = () => {
-    if (window.innerWidth < 768) {
-      setSidebarOpen(false);
-    }
-  };
+  }, [sidebarOpen, setSidebarOpen, isMobile]);
 
   if (globalError) {
     return (
@@ -72,29 +79,26 @@ export default function AppLayout() {
     <div className="h-screen flex flex-col bg-background">
       <Header />
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Mobile overlay for sidebar */}
-        {sidebarOpen && (
-          <div 
-            className="fixed inset-0 bg-black/50 z-40 md:hidden"
-            onClick={handleOverlayClick}
-          />
-        )}
         
-        {/* Sidebar - responsive positioning */}
-        {sidebarOpen && (
-          <div 
-            className={`
-              fixed md:relative inset-y-0 left-0 z-50
-              bg-background border-r shadow-lg md:shadow-none
-              w-80 md:w-auto
-              transform transition-transform duration-300 ease-in-out
-              ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-              md:translate-x-0
-            `}
-            style={{ width: window.innerWidth >= 768 ? sidebarWidth : '320px' }}
-          >
-            <Sidebar />
-          </div>
+        {/* Desktop Sidebar */}
+        <div 
+          className={`
+            hidden md:flex
+            ${sidebarOpen ? 'block' : 'hidden'}
+            bg-background border-r
+          `}
+          style={{ width: sidebarWidth }}
+        >
+          <Sidebar />
+        </div>
+
+        {/* Mobile Drawer */}
+        {isMobile && (
+          <Drawer open={sidebarOpen} onOpenChange={setSidebarOpen} direction="left">
+            <DrawerContent className="h-full w-80 max-w-[80vw]">
+              <Sidebar />
+            </DrawerContent>
+          </Drawer>
         )}
         
         {/* Main content area */}
