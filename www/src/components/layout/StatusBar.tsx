@@ -44,24 +44,27 @@ export default function StatusBar() {
     };
 
     return (
-        <footer className="h-6 border-t bg-muted/50 flex items-center px-4 text-xs text-muted-foreground">
-            <div className="flex items-center gap-4 flex-1">
+        <footer className="h-8 md:h-6 border-t bg-muted/50 flex items-center px-3 md:px-4 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
                 {currentRepository && (
                     <>
-                        <div className="flex items-center gap-1">
+                        {/* Branch info - responsive */}
+                        <div className="flex items-center gap-1 flex-shrink-0">
                             <GitBranch className="h-3 w-3" />
-                            <span>{currentRepository.current_branch}</span>
+                            <span className="truncate max-w-20 md:max-w-none">{currentRepository.current_branch}</span>
                         </div>
                         
                         {repoStatus && (
                             <>
-                                <div className="flex items-center gap-1">
+                                {/* Status info - hidden on very small screens */}
+                                <div className="hidden sm:flex items-center gap-1">
                                     {getStatusIcon()}
-                                    <span>{getChangesText()}</span>
+                                    <span className="truncate">{getChangesText()}</span>
                                 </div>
                                 
+                                {/* Sync status - always visible */}
                                 {(repoStatus.ahead > 0 || repoStatus.behind > 0) && (
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1 flex-shrink-0">
                                         {repoStatus.ahead > 0 && (
                                             <span className="text-blue-500">↑{repoStatus.ahead}</span>
                                         )}
@@ -73,25 +76,28 @@ export default function StatusBar() {
                             </>
                         )}
                         
-                        <span className="truncate">Path: {currentRepository.path}</span>
+                        {/* Repository path - hidden on mobile */}
+                        <span className="hidden lg:block truncate flex-1">Path: {currentRepository.path}</span>
                     </>
                 )}
                 
-                <div className="flex items-center gap-2 ml-auto">
+                {/* Right side - responsive */}
+                <div className="flex items-center gap-2 ml-auto flex-shrink-0">
                     {progress && (
-                        <div className="flex items-center gap-1">
-                            <div className="w-16 h-1 bg-muted rounded-full overflow-hidden">
+                        <div className="hidden sm:flex items-center gap-1">
+                            <div className="w-12 md:w-16 h-1 bg-muted rounded-full overflow-hidden">
                                 <div 
                                     className="h-full bg-primary transition-all duration-300"
                                     style={{ width: `${(progress.current / progress.total) * 100}%` }}
                                 />
                             </div>
-                            <span>{progress.current}/{progress.total}</span>
+                            <span className="text-xs">{progress.current}/{progress.total}</span>
                         </div>
                     )}
                     
-                    <span>{statusMessage}</span>
-                    <span className="opacity-60">GitWeb v1.0.0</span>
+                    {/* Status message - responsive */}
+                    <span className="truncate max-w-24 md:max-w-48 lg:max-w-none">{statusMessage}</span>
+                    <span className="opacity-60 hidden md:block">GitWeb v1.0.0</span>
                 </div>
             </div>
         </footer>

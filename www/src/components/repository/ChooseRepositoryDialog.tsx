@@ -74,39 +74,44 @@ export default function ChooseRepositoryDialog() {
   if (!showDialog) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 md:p-4">
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/50" onClick={handleCancel} />
       
       {/* Dialog */}
-      <div className="relative bg-background border rounded-lg shadow-lg w-full max-w-4xl h-[700px] flex flex-col m-4">
+      <div className="relative bg-background border rounded-lg shadow-lg w-full max-w-4xl h-[90vh] md:h-[700px] flex flex-col">
         {/* Header */}
-        <div className="p-6 border-b">
+        <div className="p-4 md:p-6 border-b">
           <div className="flex items-center justify-between">
-            <div>
+            <div className="min-w-0 flex-1">
               <h2 className="text-lg font-semibold">Choose Existing Repository</h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground truncate">
                 Browse and select an existing Git repository to import
               </p>
             </div>
-            <Button variant="ghost" size="sm" onClick={handleCancel}>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleCancel}
+              className="touch-target p-2 ml-2"
+            >
               <X className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex gap-4 min-h-0 p-6">
-          {/* Volume roots sidebar */}
-          <div className="w-48 border-r pr-4">
+        <div className="flex-1 flex flex-col md:flex-row gap-4 min-h-0 p-4 md:p-6">
+          {/* Volume roots sidebar - responsive */}
+          <div className="w-full md:w-48 border-b md:border-b-0 md:border-r pb-4 md:pb-0 md:pr-4">
             <h4 className="text-sm font-medium mb-2">Quick Access</h4>
-            <div className="space-y-1">
+            <div className="flex md:flex-col gap-2 md:gap-1 overflow-x-auto md:overflow-x-visible">
               {volumeRoots?.roots.map((root) => (
                 <Button
                   key={root.path}
                   variant="ghost"
                   size="sm"
-                  className="w-full justify-start"
+                  className="flex-shrink-0 md:w-full md:justify-start touch-target"
                   onClick={() => handleRootClick(root)}
                 >
                   {root.name === '/' ? (
@@ -125,20 +130,21 @@ export default function ChooseRepositoryDialog() {
           {/* Directory browser */}
           <div className="flex-1 flex flex-col min-w-0">
             {/* Current path */}
-            <div className="mb-2">
-              <div className="flex items-center gap-2 p-2 bg-muted/50 rounded text-sm">
-                <Folder className="h-4 w-4" />
+            <div className="mb-3">
+              <div className="flex items-center gap-2 p-3 bg-muted/50 rounded text-sm">
+                <Folder className="h-4 w-4 flex-shrink-0" />
                 <span className="truncate">{directoryListing?.current_path || 'Select a location'}</span>
               </div>
             </div>
 
             {/* Navigation */}
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-3">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleParentDirectory}
                 disabled={!directoryListing?.can_go_up}
+                className="touch-target"
               >
                 <ChevronUp className="h-4 w-4 mr-1" />
                 Up
@@ -163,20 +169,20 @@ export default function ChooseRepositoryDialog() {
                       <Button
                         key={entry.path}
                         variant={selectedRepo?.path === entry.path ? 'secondary' : 'ghost'}
-                        className="w-full justify-start mb-1 h-auto p-2"
+                        className="w-full justify-start mb-1 h-auto p-3 touch-target"
                         onClick={() => handleDirectoryClick(entry)}
                       >
-                        <div className="flex items-center gap-2 w-full">
+                        <div className="flex items-center gap-3 w-full">
                           {entry.is_git_repo ? (
-                            <FolderGit2 className="h-4 w-4 text-green-600" />
+                            <FolderGit2 className="h-4 w-4 text-green-600 flex-shrink-0" />
                           ) : (
-                            <Folder className="h-4 w-4" />
+                            <Folder className="h-4 w-4 flex-shrink-0" />
                           )}
                           <span className="truncate text-left flex-1">
                             {entry.name}
                           </span>
                           {entry.is_git_repo && (
-                            <span className="text-xs text-green-600 font-medium">Git Repository</span>
+                            <span className="text-xs text-green-600 font-medium flex-shrink-0">Git Repository</span>
                           )}
                         </div>
                       </Button>
@@ -189,12 +195,12 @@ export default function ChooseRepositoryDialog() {
 
         {/* Selected repository details */}
         {selectedRepo && (
-          <div className="space-y-3 border-t p-6">
+          <div className="space-y-3 border-t p-4 md:p-6">
             <div className="p-3 bg-muted/30 rounded">
               <div className="flex items-center gap-2 mb-2">
-                <FolderGit2 className="h-4 w-4 text-green-600" />
+                <FolderGit2 className="h-4 w-4 text-green-600 flex-shrink-0" />
                 <span className="font-medium">Selected Repository:</span>
-                <span className="text-sm text-muted-foreground">{selectedRepo.path}</span>
+                <span className="text-sm text-muted-foreground truncate">{selectedRepo.path}</span>
               </div>
             </div>
             
@@ -205,7 +211,7 @@ export default function ChooseRepositoryDialog() {
                 value={customName}
                 onChange={(e) => setCustomName(e.target.value)}
                 placeholder="Enter a name for this repository"
-                className="mt-1 w-full px-3 py-2 border border-input rounded-md bg-background text-sm"
+                className="mt-1 w-full px-3 py-2 border border-input rounded-md bg-background text-sm h-10"
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Leave empty to use the folder name: {selectedRepo.name}
@@ -215,13 +221,18 @@ export default function ChooseRepositoryDialog() {
         )}
 
         {/* Footer */}
-        <div className="flex justify-end gap-2 p-6 border-t">
-          <Button variant="outline" onClick={handleCancel}>
+        <div className="flex justify-end gap-2 p-4 md:p-6 border-t">
+          <Button 
+            variant="outline" 
+            onClick={handleCancel}
+            className="touch-target"
+          >
             Cancel
           </Button>
           <Button 
             onClick={handleImport} 
             disabled={!selectedRepo || importRepository.isPending}
+            className="touch-target"
           >
             {importRepository.isPending ? (
               <>
