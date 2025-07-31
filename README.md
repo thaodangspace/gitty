@@ -1,6 +1,11 @@
-# GitWeb: A Web-Based Git Client
+# GitWeb: An Open-Source, Mobile-First Git Client for the Modern Developer
 
-GitWeb is a modern, web-based Git client designed for developers who need a visual and intuitive interface to manage their repositories. It's built with a Go backend and a React frontend, offering a fast and responsive experience. This tool is particularly useful for those who prefer a graphical interface over the command line and for managing projects on mobile devices.
+GitWeb is an open-source, web-based Git client designed for developers who need a visual, mobile-friendly interface to manage their repositories. It's built with a Go backend and a React frontend, offering a fast and responsive experience. This tool is particularly useful for developers who work with coding CLI agents and need a way to visually inspect their work on the go.
+
+## Preview
+
+![GitWeb Preview](./images/image_1.png)
+![GitWeb Preview](./images/image_2.jpeg)
 
 ## Features
 
