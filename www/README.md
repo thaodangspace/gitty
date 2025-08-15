@@ -1,69 +1,68 @@
-# React + TypeScript + Vite
+# GitWeb Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+GitWeb's frontend is a React + TypeScript single page application built with [Vite](https://vitejs.dev). It provides a mobile-first interface for interacting with the GitWeb backend and managing Git repositories visually.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Repository management** – create, import, delete, and switch between repositories
+- **Branch operations** – list branches, create new ones and switch between them
+- **Commit history** – browse commits and view commit details and diffs
+- **File browser** – explore the repository tree, view files and see diffs for changed files
+- **Responsive layout** – desktop sidebar and mobile drawer for navigation
+- **Real-time updates** – repository status and data kept fresh via React Query
 
-## Expanding the ESLint configuration
+## Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- React 19 & TypeScript
+- Vite build tool
+- Tailwind CSS & [shadcn/ui](https://ui.shadcn.com)
+- [Jotai](https://jotai.org) for local state management
+- [React Query](https://tanstack.com/query/latest) for server state
+- React Router for routing
 
-```js
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Getting Started
 
-      // Remove tseslint.configs.recommended and replace with this
-      ...tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      ...tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      ...tseslint.configs.stylisticTypeChecked,
+1. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+2. **Start the development server**
+   ```bash
+   npm run dev
+   ```
+   The app will run at `http://localhost:5173` and expects the backend at `http://localhost:8080` by default. You can override the backend URL by setting `VITE_API_BASE`.
+
+3. **Lint the project**
+   ```bash
+   npm run lint
+   ```
+
+4. **Create a production build**
+   ```bash
+   npm run build
+   ```
+
+## Project Structure
+
+```
+www/
+  src/
+    components/   # UI components (repository panels, file viewers, layout)
+    hooks/        # custom hooks including API helpers
+    lib/          # API client and utility helpers
+    store/        # Jotai atoms and React Query keys
+    types/        # shared TypeScript types
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Environment Variables
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- `VITE_API_BASE` – URL of the GitWeb backend (defaults to `http://localhost:8080`)
 
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Available Scripts
+
+- `npm run dev` – start Vite dev server with hot reload
+- `npm run build` – type-check and create production build
+- `npm run lint` – run ESLint over the codebase
+- `npm run preview` – preview the production build locally
+
