@@ -8,6 +8,7 @@ describe('currentSelectedFileAtom', () => {
     store.set(currentSelectedFileAtom, '/tmp/file.txt')
     expect(store.get(selectedFilesAtom)).toEqual(['/tmp/file.txt'])
     expect(store.get(currentFilePathAtom)).toBe('/tmp/file.txt')
+    expect(store.get(currentSelectedFileAtom)).toBe('/tmp/file.txt')
   })
 
   it('clears selectedFiles and currentFilePath when set to null', () => {
@@ -16,5 +17,6 @@ describe('currentSelectedFileAtom', () => {
     store.set(currentSelectedFileAtom, null)
     expect(store.get(selectedFilesAtom)).toEqual([])
     expect(store.get(currentFilePathAtom)).toBeNull()
+    expect(store.get(currentSelectedFileAtom)).toBeNull()
   })
 })
