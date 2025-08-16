@@ -125,6 +125,7 @@ export default function CommitDetailsDialog({ commitHash, isOpen, onClose }: Com
     };
 
     const renderPatch = (patch: string, language?: string) => {
+        let lineNumber = 1;
         return patch
             .split('\n')
             .map((line) => {
@@ -137,7 +138,9 @@ export default function CommitDetailsDialog({ commitHash, isOpen, onClose }: Com
                     highlighted = hljs.highlightAuto(content).value;
                 }
                 const lineClass = sign === '+' ? 'hljs-addition' : 'hljs-deletion';
-                return `<span class="${lineClass}">${sign}${highlighted}</span>`;
+                const rendered = `<span class="diff-line-number">${lineNumber}</span><span class="${lineClass}">${sign}${highlighted}</span>`;
+                lineNumber++;
+                return rendered;
             })
             .join('\n');
     };

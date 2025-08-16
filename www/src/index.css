@@ -41,6 +41,12 @@
     --color-sidebar-ring: var(--sidebar-ring);
 }
 
+@layer components {
+    .diff-line-number {
+        @apply text-muted-foreground select-none inline-block w-10 text-right mr-2;
+    }
+}
+
 :root {
     --radius: 0.625rem;
     --background: oklch(1 0 0);
