@@ -6,6 +6,11 @@ import { GitCommit, User, Calendar, Hash, Plus, Minus, FileText, X } from 'lucid
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import hljs from 'highlight.js/lib/core';
+import diff from 'highlight.js/lib/languages/diff';
+import 'highlight.js/styles/github.css';
+
+hljs.registerLanguage('diff', diff);
 
 interface CommitDetailsDialogProps {
     commitHash: string | null;
@@ -169,9 +174,12 @@ export default function CommitDetailsDialog({ commitHash, isOpen, onClose }: Com
                                         
                                         {change.patch && (
                                             <div className="p-4">
-                                                <pre className="text-xs bg-muted/50 p-3 rounded border overflow-x-auto whitespace-pre-wrap font-mono">
-                                                    {change.patch}
-                                                </pre>
+                                                <pre
+                                                    className="hljs text-xs bg-muted/50 p-3 rounded border overflow-x-auto whitespace-pre-wrap font-mono"
+                                                    dangerouslySetInnerHTML={{
+                                                        __html: hljs.highlight(change.patch, { language: 'diff' }).value,
+                                                    }}
+                                                />
                                             </div>
                                         )}
                                     </div>
