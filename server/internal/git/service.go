@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	diff "github.com/go-git/go-git/v5/plumbing/format/diff"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
@@ -295,18 +296,18 @@ func (s *Service) GetFileContent(repoPath, filePath string) ([]byte, error) {
 
 func (s *Service) SaveFileContent(repoPath, filePath string, content []byte) error {
 	fullPath := filepath.Join(repoPath, filePath)
-	
+
 	dir := filepath.Dir(fullPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directories: %w", err)
 	}
-	
+
 	return os.WriteFile(fullPath, content, 0644)
 }
 
 func (s *Service) GetFileTree(repoPath string) ([]models.FileInfo, error) {
 	var files []models.FileInfo
-	
+
 	// Initialize gitignore parser
 	gitignore := NewGitIgnore(repoPath)
 
@@ -487,51 +488,61 @@ func (s *Service) GetCommitDetails(repoPath, commitHash string) (*models.CommitD
 
 		for _, filePatch := range patch.FilePatches() {
 			from, to := filePatch.Files()
-			
+
 			var filePath string
 			var changeType string
-			
+
 			if from == nil && to != nil {
 				// New file
 				filePath = to.Path()
 				changeType = "added"
-				stats.Additions += len(filePatch.Chunks())
 			} else if from != nil && to == nil {
 				// Deleted file
 				filePath = from.Path()
 				changeType = "deleted"
-				stats.Deletions += len(filePatch.Chunks())
 			} else if from != nil && to != nil {
 				// Modified file
 				filePath = to.Path()
 				changeType = "modified"
-				
-				// Count additions and deletions
-				for _, chunk := range filePatch.Chunks() {
-					switch chunk.Type() {
-					case 1: // Addition
-						stats.Additions++
-					case 2: // Deletion
-						stats.Deletions++
+			}
+
+			// Build patch string containing only changed lines and
+			// count additions/deletions
+			var patchBuilder strings.Builder
+			additions := 0
+			deletions := 0
+			for _, chunk := range filePatch.Chunks() {
+				switch chunk.Type() {
+				case diff.Add:
+					lines := strings.Split(chunk.Content(), "\n")
+					for _, line := range lines {
+						if line == "" {
+							continue
+						}
+						patchBuilder.WriteString("+" + line + "\n")
+						additions++
+					}
+				case diff.Delete:
+					lines := strings.Split(chunk.Content(), "\n")
+					for _, line := range lines {
+						if line == "" {
+							continue
+						}
+						patchBuilder.WriteString("-" + line + "\n")
+						deletions++
 					}
 				}
 			}
 
-			// Get patch content
-			patchContent := ""
-			if chunks := filePatch.Chunks(); len(chunks) > 0 {
-				var builder strings.Builder
-				for _, chunk := range chunks {
-					builder.WriteString(chunk.Content())
-				}
-				patchContent = builder.String()
-			}
+			patchContent := strings.TrimSuffix(patchBuilder.String(), "\n")
+			stats.Additions += additions
+			stats.Deletions += deletions
 
 			changes = append(changes, models.FileDiff{
 				Path:       filePath,
 				ChangeType: changeType,
-				Additions:  0, // TODO: Calculate line-level stats
-				Deletions:  0, // TODO: Calculate line-level stats
+				Additions:  additions,
+				Deletions:  deletions,
 				Patch:      patchContent,
 			})
 		}
@@ -638,14 +649,14 @@ func (s *Service) GetFileDiff(repoPath, filePath string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("failed to read file: %w", err)
 		}
-		
+
 		var diff strings.Builder
 		diff.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", filePath, filePath))
 		diff.WriteString("new file mode 100644\n")
 		diff.WriteString("index 0000000..0000000\n")
 		diff.WriteString("--- /dev/null\n")
 		diff.WriteString(fmt.Sprintf("+++ b/%s\n", filePath))
-		
+
 		lines := strings.Split(string(content), "\n")
 		if len(lines) > 0 {
 			diff.WriteString(fmt.Sprintf("@@ -0,0 +1,%d @@\n", len(lines)))
@@ -653,7 +664,7 @@ func (s *Service) GetFileDiff(repoPath, filePath string) (string, error) {
 				diff.WriteString("+" + line + "\n")
 			}
 		}
-		
+
 		return diff.String(), nil
 
 	case git.Modified, git.Added:
@@ -732,31 +743,31 @@ func (s *Service) GetFileDiff(repoPath, filePath string) (string, error) {
 // generateTextDiff creates a unified diff between two text contents
 func (s *Service) generateTextDiff(filePath, oldContent, newContent string) string {
 	var diff strings.Builder
-	
+
 	diff.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", filePath, filePath))
 	diff.WriteString("index 0000000..0000000 100644\n")
 	diff.WriteString(fmt.Sprintf("--- a/%s\n", filePath))
 	diff.WriteString(fmt.Sprintf("+++ b/%s\n", filePath))
-	
+
 	oldLines := strings.Split(oldContent, "\n")
 	newLines := strings.Split(newContent, "\n")
-	
+
 	// Simple line-by-line diff (this could be improved with a proper diff algorithm)
 	maxLines := max(len(oldLines), len(newLines))
-	
+
 	if maxLines > 0 {
 		diff.WriteString(fmt.Sprintf("@@ -1,%d +1,%d @@\n", len(oldLines), len(newLines)))
-		
+
 		for i := 0; i < maxLines; i++ {
 			var oldLine, newLine string
-			
+
 			if i < len(oldLines) {
 				oldLine = oldLines[i]
 			}
 			if i < len(newLines) {
 				newLine = newLines[i]
 			}
-			
+
 			if i < len(oldLines) && i < len(newLines) {
 				if oldLine != newLine {
 					// Changed line
@@ -775,7 +786,7 @@ func (s *Service) generateTextDiff(filePath, oldContent, newContent string) stri
 			}
 		}
 	}
-	
+
 	return diff.String()
 }
 
