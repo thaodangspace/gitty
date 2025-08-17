@@ -3,6 +3,7 @@ import { selectedRepositoryAtom, selectedFilesAtom } from '@/store/atoms';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
+import { hljs, getLanguageFromPath } from '@/lib/highlight';
 import { 
     File, 
     Loader2, 
@@ -160,11 +161,19 @@ export default function FileViewer() {
             );
         }
 
+        const language = getLanguageFromPath(fileName);
+        const highlighted = fileContent
+            ? language && hljs.getLanguage(language)
+                ? hljs.highlight(fileContent, { language, ignoreIllegals: true }).value
+                : hljs.highlightAuto(fileContent).value
+            : '';
+
         return (
             <div className="p-3">
-                <pre className="whitespace-pre-wrap text-sm font-mono bg-muted/30 p-3 rounded overflow-auto">
-                    {fileContent}
-                </pre>
+                <pre
+                    className="hljs whitespace-pre-wrap text-sm font-mono bg-muted/30 p-3 rounded overflow-auto"
+                    dangerouslySetInnerHTML={{ __html: highlighted }}
+                />
             </div>
         );
     };
