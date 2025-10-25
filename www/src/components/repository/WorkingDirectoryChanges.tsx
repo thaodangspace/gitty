@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAtom } from 'jotai';
-import { selectedRepositoryAtom } from '@/store/atoms';
+import { selectedRepositoryAtom, vimModeEnabledAtom, vimFocusContextAtom, vimFocusIndexAtom } from '@/store/atoms';
 import { useRepositoryStatus, useStageFile, useUnstageFile } from '@/store/queries';
 import type { FileChange } from '@/types/api';
+import { useVimNavigation } from '@/hooks/use-vim-navigation';
 import { 
     GitBranch, 
     FileText, 
@@ -74,11 +75,14 @@ interface FileChangeItemProps {
     onStage?: () => void;
     onUnstage?: () => void;
     onViewDiff?: () => void;
+    isVimFocused?: boolean;
 }
 
-function FileChangeItem({ file, isStaged = false, onStage, onUnstage, onViewDiff }: FileChangeItemProps) {
+function FileChangeItem({ file, isStaged = false, onStage, onUnstage, onViewDiff, isVimFocused = false }: FileChangeItemProps) {
     return (
-        <div className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+        <div className={`flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors ${
+            isVimFocused ? 'ring-2 ring-blue-500 bg-blue-50/50' : ''
+        }`}>
             <div className="flex-shrink-0">
                 {getStatusIcon(file.status)}
             </div>
@@ -135,11 +139,14 @@ function FileChangeItem({ file, isStaged = false, onStage, onUnstage, onViewDiff
 interface UntrackedFileItemProps {
     fileName: string;
     onStage?: () => void;
+    isVimFocused?: boolean;
 }
 
-function UntrackedFileItem({ fileName, onStage }: UntrackedFileItemProps) {
+function UntrackedFileItem({ fileName, onStage, isVimFocused = false }: UntrackedFileItemProps) {
     return (
-        <div className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+        <div className={`flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors ${
+            isVimFocused ? 'ring-2 ring-blue-500 bg-blue-50/50' : ''
+        }`}>
             <div className="flex-shrink-0">
                 <Circle className="h-4 w-4 text-muted-foreground" />
             </div>
@@ -175,6 +182,50 @@ export default function WorkingDirectoryChanges() {
     const unstageFileMutation = useUnstageFile();
     const [showCommitDialog, setShowCommitDialog] = useState(false);
     const [selectedDiffFile, setSelectedDiffFile] = useState<{ path: string; name: string } | null>(null);
+
+    // Vim navigation
+    const [vimEnabled] = useAtom(vimModeEnabledAtom);
+    const [vimContext, setVimContext] = useAtom(vimFocusContextAtom);
+    const [vimIndex] = useAtom(vimFocusIndexAtom);
+
+    // Create flattened list of all files for vim navigation
+    const allFiles = useMemo(() => {
+        if (!repoStatus) return [];
+
+        const files: Array<{ type: 'staged' | 'modified' | 'untracked'; data: FileChange | string }> = [];
+
+        repoStatus.staged.forEach(file => files.push({ type: 'staged', data: file }));
+        repoStatus.modified.forEach(file => files.push({ type: 'modified', data: file }));
+        repoStatus.untracked.forEach(file => files.push({ type: 'untracked', data: file }));
+
+        return files;
+    }, [repoStatus]);
+
+    const { isVimActive, currentIndex, activateContext } = useVimNavigation({
+        context: 'file-changes',
+        itemCount: allFiles.length,
+        onActivate: (index) => {
+            const file = allFiles[index];
+            if (file.type === 'staged' || file.type === 'modified') {
+                const fileChange = file.data as FileChange;
+                handleViewDiff(fileChange.path);
+            }
+        },
+    });
+
+    // Auto-activate this context when vim is enabled and we're in this view
+    useEffect(() => {
+        if (vimEnabled && allFiles.length > 0 && vimContext === 'none') {
+            activateContext();
+        }
+    }, [vimEnabled, allFiles.length, vimContext, activateContext]);
+
+    // Handle clicking on the container to activate vim context
+    const handleContainerClick = () => {
+        if (vimEnabled && allFiles.length > 0) {
+            setVimContext('file-changes');
+        }
+    };
 
     // Debug logging
     console.log('WorkingDirectoryChanges - currentRepository:', currentRepository);
@@ -272,7 +323,7 @@ export default function WorkingDirectoryChanges() {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-auto" onClick={handleContainerClick}>
                 <div className="p-4 space-y-6">
                     {/* Staged Changes */}
                     {repoStatus.staged.length > 0 && (
@@ -284,15 +335,19 @@ export default function WorkingDirectoryChanges() {
                                 </h3>
                             </div>
                             <div className="space-y-2">
-                                {repoStatus.staged.map((file, index) => (
-                                    <FileChangeItem
-                                        key={`staged-${index}`}
-                                        file={file}
-                                        isStaged={true}
-                                        onUnstage={() => handleUnstageFile(file.path)}
-                                        onViewDiff={() => handleViewDiff(file.path)}
-                                    />
-                                ))}
+                                {repoStatus.staged.map((file, index) => {
+                                    const globalIndex = index;
+                                    return (
+                                        <FileChangeItem
+                                            key={`staged-${index}`}
+                                            file={file}
+                                            isStaged={true}
+                                            onUnstage={() => handleUnstageFile(file.path)}
+                                            onViewDiff={() => handleViewDiff(file.path)}
+                                            isVimFocused={isVimActive && currentIndex === globalIndex}
+                                        />
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
@@ -307,15 +362,19 @@ export default function WorkingDirectoryChanges() {
                                 </h3>
                             </div>
                             <div className="space-y-2">
-                                {repoStatus.modified.map((file, index) => (
-                                    <FileChangeItem
-                                        key={`modified-${index}`}
-                                        file={file}
-                                        isStaged={false}
-                                        onStage={() => handleStageFile(file.path)}
-                                        onViewDiff={() => handleViewDiff(file.path)}
-                                    />
-                                ))}
+                                {repoStatus.modified.map((file, index) => {
+                                    const globalIndex = repoStatus.staged.length + index;
+                                    return (
+                                        <FileChangeItem
+                                            key={`modified-${index}`}
+                                            file={file}
+                                            isStaged={false}
+                                            onStage={() => handleStageFile(file.path)}
+                                            onViewDiff={() => handleViewDiff(file.path)}
+                                            isVimFocused={isVimActive && currentIndex === globalIndex}
+                                        />
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
@@ -330,13 +389,17 @@ export default function WorkingDirectoryChanges() {
                                 </h3>
                             </div>
                             <div className="space-y-2">
-                                {repoStatus.untracked.map((fileName, index) => (
-                                    <UntrackedFileItem
-                                        key={`untracked-${index}`}
-                                        fileName={fileName}
-                                        onStage={() => handleStageFile(fileName)}
-                                    />
-                                ))}
+                                {repoStatus.untracked.map((fileName, index) => {
+                                    const globalIndex = repoStatus.staged.length + repoStatus.modified.length + index;
+                                    return (
+                                        <UntrackedFileItem
+                                            key={`untracked-${index}`}
+                                            fileName={fileName}
+                                            onStage={() => handleStageFile(fileName)}
+                                            isVimFocused={isVimActive && currentIndex === globalIndex}
+                                        />
+                                    );
+                                })}
                             </div>
                         </div>
                     )}

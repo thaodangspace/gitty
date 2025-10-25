@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAtom } from 'jotai';
-import { selectedRepositoryAtom, selectedFilesAtom } from '@/store/atoms';
+import { selectedRepositoryAtom, selectedFilesAtom, vimModeEnabledAtom, vimFocusContextAtom, vimFocusIndexAtom } from '@/store/atoms';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
+import { useVimNavigation } from '@/hooks/use-vim-navigation';
 import { 
     ChevronRight, 
     ChevronDown, 
@@ -31,6 +32,11 @@ export default function FileTreeBrowser({ onFileSelect }: FileTreeBrowserProps =
     const [selectedFiles, setSelectedFiles] = useAtom(selectedFilesAtom);
     const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
     const isMobile = useIsMobile();
+
+    // Vim navigation
+    const [vimEnabled] = useAtom(vimModeEnabledAtom);
+    const [vimContext, setVimContext] = useAtom(vimFocusContextAtom);
+    const [vimIndex] = useAtom(vimFocusIndexAtom);
 
     const { data: files, isLoading, error } = useQuery({
         queryKey: ['file-tree', currentRepository?.id],
@@ -131,8 +137,64 @@ export default function FileTreeBrowser({ onFileSelect }: FileTreeBrowserProps =
         }
     };
 
-    const renderTreeNode = (node: TreeNode) => {
+    // Flatten tree to get visible nodes for vim navigation
+    const flattenTree = (nodes: TreeNode[]): TreeNode[] => {
+        const flattened: TreeNode[] = [];
+        const traverse = (nodeList: TreeNode[]) => {
+            nodeList.forEach(node => {
+                flattened.push(node);
+                if (node.is_directory && node.isExpanded && node.children) {
+                    traverse(node.children);
+                }
+            });
+        };
+        traverse(nodes);
+        return flattened;
+    };
+
+    const fileTree = buildFileTree(files || []);
+    const flattenedNodes = useMemo(() => flattenTree(fileTree), [fileTree, expandedDirs]);
+
+    // Vim navigation setup
+    const { isVimActive, currentIndex, activateContext } = useVimNavigation({
+        context: 'file-tree',
+        itemCount: flattenedNodes.length,
+        onActivate: (index) => {
+            if (flattenedNodes[index]) {
+                selectFile(flattenedNodes[index]);
+            }
+        },
+        onExpand: (index) => {
+            const node = flattenedNodes[index];
+            if (node && node.is_directory && !node.isExpanded) {
+                toggleDirectory(node.path);
+            }
+        },
+        onCollapse: (index) => {
+            const node = flattenedNodes[index];
+            if (node && node.is_directory && node.isExpanded) {
+                toggleDirectory(node.path);
+            }
+        },
+    });
+
+    // Auto-activate this context when vim is enabled and we're in this view
+    useEffect(() => {
+        if (vimEnabled && flattenedNodes.length > 0 && vimContext === 'none') {
+            activateContext();
+        }
+    }, [vimEnabled, flattenedNodes.length, vimContext, activateContext]);
+
+    // Handle clicking on the container to activate vim context
+    const handleContainerClick = () => {
+        if (vimEnabled && flattenedNodes.length > 0) {
+            setVimContext('file-tree');
+        }
+    };
+
+    const renderTreeNode = (node: TreeNode, index: number) => {
         const isSelected = selectedFiles.includes(node.path);
+        const isVimFocused = isVimActive && currentIndex === index;
         const paddingLeft = node.level * 16 + 8;
 
         return (
@@ -140,6 +202,7 @@ export default function FileTreeBrowser({ onFileSelect }: FileTreeBrowserProps =
                 <div
                     className={`flex items-center py-1 px-2 hover:bg-muted/50 cursor-pointer text-sm
                         ${isSelected ? 'bg-primary/10 text-primary' : ''}
+                        ${isVimFocused ? 'ring-2 ring-blue-500 bg-blue-50/50' : ''}
                         ${isMobile ? 'touch-target py-3' : ''}
                     `}
                     style={{ paddingLeft }}
@@ -170,12 +233,6 @@ export default function FileTreeBrowser({ onFileSelect }: FileTreeBrowserProps =
                         <span className="truncate">{node.name}</span>
                     </div>
                 </div>
-                
-                {node.is_directory && node.isExpanded && node.children && (
-                    <div>
-                        {node.children.map(child => renderTreeNode(child))}
-                    </div>
-                )}
             </div>
         );
     };
@@ -210,20 +267,18 @@ export default function FileTreeBrowser({ onFileSelect }: FileTreeBrowserProps =
         );
     }
 
-    const fileTree = buildFileTree(files || []);
-
     return (
-        <div className="h-full overflow-auto">
+        <div className="h-full overflow-auto" onClick={handleContainerClick}>
             <div className="p-2 border-b">
                 <h3 className="font-medium text-sm">Files</h3>
             </div>
             <div className="py-2">
-                {fileTree.length === 0 ? (
+                {flattenedNodes.length === 0 ? (
                     <div className="p-4 text-center text-muted-foreground text-sm">
                         No files found
                     </div>
                 ) : (
-                    fileTree.map(node => renderTreeNode(node))
+                    flattenedNodes.map((node, index) => renderTreeNode(node, index))
                 )}
             </div>
         </div>

@@ -1,16 +1,46 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAtom } from 'jotai';
-import { selectedRepositoryAtom } from '@/store/atoms';
+import { selectedRepositoryAtom, vimModeEnabledAtom, vimFocusContextAtom, vimFocusIndexAtom } from '@/store/atoms';
 import { useCommitHistory } from '@/store/queries';
 import { format } from 'date-fns';
 import { GitCommit, User, Calendar, Hash } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import CommitDetailsDialog from './CommitDetailsDialog';
+import { useVimNavigation } from '@/hooks/use-vim-navigation';
 
 export default function CommitHistory() {
     const [currentRepository] = useAtom(selectedRepositoryAtom);
     const { data: commits, isLoading, error } = useCommitHistory(currentRepository?.id);
     const [selectedCommitHash, setSelectedCommitHash] = useState<string | null>(null);
+
+    // Vim navigation
+    const [vimEnabled] = useAtom(vimModeEnabledAtom);
+    const [vimContext, setVimContext] = useAtom(vimFocusContextAtom);
+    const [vimIndex] = useAtom(vimFocusIndexAtom);
+
+    const { isVimActive, currentIndex, activateContext } = useVimNavigation({
+        context: 'commit-list',
+        itemCount: commits?.length || 0,
+        onActivate: (index) => {
+            if (commits && commits[index]) {
+                setSelectedCommitHash(commits[index].hash);
+            }
+        },
+    });
+
+    // Auto-activate this context when vim is enabled and we're in this view
+    useEffect(() => {
+        if (vimEnabled && commits && commits.length > 0 && vimContext === 'none') {
+            activateContext();
+        }
+    }, [vimEnabled, commits, vimContext, activateContext]);
+
+    // Handle clicking on the container to activate vim context
+    const handleContainerClick = () => {
+        if (vimEnabled && commits && commits.length > 0) {
+            setVimContext('commit-list');
+        }
+    };
 
     // Debug logging
     console.log('CommitHistory - currentRepository:', currentRepository);
@@ -60,12 +90,14 @@ export default function CommitHistory() {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-auto" onClick={handleContainerClick}>
                 <div className="space-y-2 p-4">
-                    {commits.map((commit) => (
+                    {commits.map((commit, index) => (
                         <div
                             key={commit.hash}
-                            className="border rounded-lg p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                            className={`border rounded-lg p-4 hover:bg-muted/50 transition-colors cursor-pointer ${
+                                isVimActive && currentIndex === index ? 'ring-2 ring-blue-500 bg-blue-50/50' : ''
+                            }`}
                         >
                             <div className="flex items-start gap-3">
                                 <div className="flex-shrink-0 mt-1">

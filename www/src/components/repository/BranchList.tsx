@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAtom } from 'jotai';
-import { selectedRepositoryAtom } from '@/store/atoms';
+import { selectedRepositoryAtom, vimModeEnabledAtom, vimFocusContextAtom, vimFocusIndexAtom } from '@/store/atoms';
 import { useBranches, useSwitchBranch, useDeleteBranch } from '@/store/queries';
 import { format } from 'date-fns';
 import { GitBranch, GitMerge, Plus, Check, Hash, User, Calendar, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useVimNavigation } from '@/hooks/use-vim-navigation';
 import { 
     Dialog, 
     DialogContent, 
@@ -27,6 +28,37 @@ export default function BranchList() {
     const switchBranchMutation = useSwitchBranch();
     const deleteBranchMutation = useDeleteBranch();
     const isMobile = useIsMobile();
+
+    // Vim navigation
+    const [vimEnabled] = useAtom(vimModeEnabledAtom);
+    const [vimContext, setVimContext] = useAtom(vimFocusContextAtom);
+    const [vimIndex] = useAtom(vimFocusIndexAtom);
+
+    const otherBranches = branches?.filter(branch => !branch.is_current) || [];
+
+    const { isVimActive, currentIndex, activateContext } = useVimNavigation({
+        context: 'branch-list',
+        itemCount: otherBranches.length,
+        onActivate: (index) => {
+            if (otherBranches[index]) {
+                handleSwitchBranch(otherBranches[index].name);
+            }
+        },
+    });
+
+    // Auto-activate this context when vim is enabled and we're in this view
+    useEffect(() => {
+        if (vimEnabled && otherBranches.length > 0 && vimContext === 'none') {
+            activateContext();
+        }
+    }, [vimEnabled, otherBranches.length, vimContext, activateContext]);
+
+    // Handle clicking on the container to activate vim context
+    const handleContainerClick = () => {
+        if (vimEnabled && otherBranches.length > 0) {
+            setVimContext('branch-list');
+        }
+    };
 
     // Debug logging
     console.log('BranchList - currentRepository:', currentRepository);
@@ -63,7 +95,6 @@ export default function BranchList() {
     }
 
     const currentBranch = branches.find(branch => branch.is_current);
-    const otherBranches = branches.filter(branch => !branch.is_current);
 
     const handleSwitchBranch = (branchName: string) => {
         if (!currentRepository) return;
@@ -168,15 +199,17 @@ export default function BranchList() {
 
                     {/* Other Branches */}
                     {otherBranches.length > 0 && (
-                        <div>
+                        <div onClick={handleContainerClick}>
                             <h3 className="text-sm font-medium text-muted-foreground mb-2">
                                 Other Branches ({otherBranches.length})
                             </h3>
                             <div className="space-y-2">
-                                {otherBranches.map((branch) => (
+                                {otherBranches.map((branch, index) => (
                                     <div
                                         key={branch.name}
-                                        className="border rounded-lg p-4 hover:bg-muted/50 transition-colors"
+                                        className={`border rounded-lg p-4 hover:bg-muted/50 transition-colors ${
+                                            isVimActive && currentIndex === index ? 'ring-2 ring-blue-500 bg-blue-50/50' : ''
+                                        }`}
                                     >
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-3">

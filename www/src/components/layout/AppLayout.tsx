@@ -8,12 +8,16 @@ import { useEffect } from 'react';
 import { useRepositories } from '@/hooks/api';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2 } from 'lucide-react';
+import { useGlobalVimMode } from '@/hooks/use-vim-navigation';
 
 export default function AppLayout() {
     const [globalError, setGlobalError] = useAtom(globalErrorAtom);
     const [globalLoading] = useAtom(globalLoadingAtom);
 
     const { error: repoError } = useRepositories();
+
+    // Initialize global vim mode
+    useGlobalVimMode();
 
     useEffect(() => {
         if (repoError) {

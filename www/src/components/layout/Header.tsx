@@ -3,6 +3,10 @@ import {
     selectedRepositoryAtom,
     activeViewAtom,
     showChooseRepositoryDialogAtom,
+    vimModeEnabledAtom,
+    vimFocusContextAtom,
+    vimFocusIndexAtom,
+    vimFocusableCountAtom,
 } from '@/store/atoms';
 import type { ActiveView } from '@/store/atoms/ui-atoms';
 import { Button } from '@/components/ui/button';
@@ -17,7 +21,7 @@ import {
     MoreHorizontal,
     Network,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -35,6 +39,12 @@ export default function Header() {
     const [showMobileMenu, setShowMobileMenu] = useState(false);
     const isMobile = useIsMobile();
 
+    // Vim navigation state
+    const [vimEnabled] = useAtom(vimModeEnabledAtom);
+    const [vimContext] = useAtom(vimFocusContextAtom);
+    const [vimIndex] = useAtom(vimFocusIndexAtom);
+    const [, setVimFocusableCount] = useAtom(vimFocusableCountAtom);
+
     const navigationItems: { id: ActiveView; label: string; icon: any }[] = [
         { id: 'status', label: 'Changes', icon: GitCompare },
         { id: 'branches', label: 'Branches', icon: GitMerge },
@@ -45,6 +55,78 @@ export default function Header() {
     const handleViewChange = (view: ActiveView) => {
         setActiveView(view);
         setShowMobileMenu(false);
+    };
+
+    // Build list of focusable header actions for vim navigation
+    const headerActions = useCallback(() => {
+        const actions: Array<{ label: string; action: () => void }> = [];
+
+        // Repository selector (if available)
+        if (currentRepository) {
+            actions.push({
+                label: 'Repository',
+                action: () => setShowChooseDialog(true),
+            });
+        }
+
+        // Navigation items (if repository is selected)
+        if (currentRepository) {
+            navigationItems.forEach((item) => {
+                actions.push({
+                    label: item.label,
+                    action: () => setActiveView(item.id),
+                });
+            });
+        }
+
+        // Refresh button (if repository is selected)
+        if (currentRepository) {
+            actions.push({
+                label: 'Refresh',
+                action: () => {
+                    // Refresh action placeholder
+                    console.log('Refresh triggered');
+                },
+            });
+        }
+
+        // Settings button (always available)
+        actions.push({
+            label: 'Settings',
+            action: () => setActiveView('settings'),
+        });
+
+        return actions;
+    }, [currentRepository, navigationItems, setShowChooseDialog, setActiveView]);
+
+    // Update focusable count when vim mode is in header context
+    useEffect(() => {
+        if (vimEnabled && vimContext === 'header') {
+            setVimFocusableCount(headerActions().length);
+        }
+    }, [vimEnabled, vimContext, headerActions, setVimFocusableCount]);
+
+    // Handle Enter key activation in header
+    useEffect(() => {
+        if (!vimEnabled || vimContext !== 'header') return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const actions = headerActions();
+                if (vimIndex >= 0 && vimIndex < actions.length) {
+                    actions[vimIndex].action();
+                }
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [vimEnabled, vimContext, vimIndex, headerActions]);
+
+    // Helper to check if an element is vim-focused
+    const isVimFocused = (index: number) => {
+        return vimEnabled && vimContext === 'header' && vimIndex === index;
     };
 
     return (
@@ -61,7 +143,9 @@ export default function Header() {
                     variant="ghost"
                     size="sm"
                     onClick={() => setShowChooseDialog(true)}
-                    className="hidden md:flex items-center gap-2 text-sm hover:bg-accent h-auto py-1 px-2"
+                    className={`hidden md:flex items-center gap-2 text-sm hover:bg-accent h-auto py-1 px-2 ${
+                        isVimFocused(0) ? 'ring-2 ring-blue-500' : ''
+                    }`}
                 >
                     <span>/</span>
                     <span className="font-medium truncate max-w-32">{currentRepository.name}</span>
@@ -74,15 +158,18 @@ export default function Header() {
             {/* Desktop navigation */}
             <div className="hidden md:flex items-center gap-1 ml-4">
                 {currentRepository &&
-                    navigationItems.map((item) => {
+                    navigationItems.map((item, idx) => {
                         const Icon = item.icon;
+                        const vimIdx = currentRepository ? idx + 1 : idx;
                         return (
                             <Button
                                 key={item.id}
                                 variant={activeView === item.id ? 'secondary' : 'ghost'}
                                 size="sm"
                                 onClick={() => setActiveView(item.id)}
-                                className="touch-target"
+                                className={`touch-target ${
+                                    isVimFocused(vimIdx) ? 'ring-2 ring-blue-500' : ''
+                                }`}
                             >
                                 <Icon className="h-4 w-4 mr-1" />
                                 {item.label}
@@ -156,7 +243,9 @@ export default function Header() {
                         variant="ghost"
                         size="sm"
                         title="Refresh"
-                        className="touch-target p-2 md:p-1"
+                        className={`touch-target p-2 md:p-1 ${
+                            isVimFocused(1 + navigationItems.length) ? 'ring-2 ring-blue-500' : ''
+                        }`}
                     >
                         <RefreshCw className="h-5 w-5 md:h-4 md:w-4" />
                     </Button>
@@ -166,7 +255,11 @@ export default function Header() {
                     size="sm"
                     onClick={() => setActiveView('settings')}
                     title="Settings"
-                    className="touch-target p-2 md:p-1"
+                    className={`touch-target p-2 md:p-1 ${
+                        isVimFocused(currentRepository ? 2 + navigationItems.length : 0)
+                            ? 'ring-2 ring-blue-500'
+                            : ''
+                    }`}
                 >
                     <Settings className="h-5 w-5 md:h-4 md:w-4" />
                 </Button>

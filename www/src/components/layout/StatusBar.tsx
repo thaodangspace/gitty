@@ -3,14 +3,19 @@ import {
   selectedRepositoryAtom,
   statusMessageAtom,
   progressAtom,
+  vimModeEnabledAtom,
+  vimFocusInfoAtom,
 } from "@/store/atoms";
 import { useRepositoryStatus } from "@/store/queries";
 import { GitBranch, Circle, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 export default function StatusBar() {
   const [currentRepository] = useAtom(selectedRepositoryAtom);
   const [statusMessage] = useAtom(statusMessageAtom);
   const [progress] = useAtom(progressAtom);
+  const [vimEnabled] = useAtom(vimModeEnabledAtom);
+  const [vimFocusInfo] = useAtom(vimFocusInfoAtom);
 
   const { data: repoStatus } = useRepositoryStatus(currentRepository?.id);
 
@@ -93,6 +98,13 @@ export default function StatusBar() {
 
         {/* Right side - responsive */}
         <div className="flex items-center gap-2 ml-auto flex-shrink-0">
+          {/* Vim mode indicator */}
+          {vimEnabled && (
+            <Badge variant="outline" className="h-5 bg-blue-50 text-blue-600 border-blue-300">
+              VIM {vimFocusInfo && `- ${vimFocusInfo}`}
+            </Badge>
+          )}
+
           {progress && (
             <div className="hidden sm:flex items-center gap-1">
               <div className="w-12 md:w-16 h-1 bg-muted rounded-full overflow-hidden">
