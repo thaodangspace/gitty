@@ -18,7 +18,7 @@ import ruby from "highlight.js/lib/languages/ruby";
 import rust from "highlight.js/lib/languages/rust";
 import yaml from "highlight.js/lib/languages/yaml";
 import sql from "highlight.js/lib/languages/sql";
-import toml from "highlight.js/lib/languages/toml";
+// import toml from "highlight.js/lib/languages/toml";
 import "highlight.js/styles/github.css";
 
 hljs.registerLanguage("diff", diff);
@@ -40,7 +40,7 @@ hljs.registerLanguage("ruby", ruby);
 hljs.registerLanguage("rust", rust);
 hljs.registerLanguage("yaml", yaml);
 hljs.registerLanguage("sql", sql);
-hljs.registerLanguage("toml", toml);
+// hljs.registerLanguage("toml", toml);
 
 const extensionToLanguage: Record<string, string> = {
   js: "javascript",
@@ -81,4 +81,3 @@ export const getLanguageFromPath = (path: string): string | undefined => {
 };
 
 export { hljs };
-

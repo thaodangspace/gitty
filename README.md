@@ -1,85 +1,23 @@
-# GitWeb: An Open-Source, Mobile-First Git Client for the Modern Developer
+# WIP: Gitty - A Tale of a Homeserver and the Craving for a Good Git UI for remote machine
 
-GitWeb is an open-source, web-based Git client designed for developers who need a visual, mobile-friendly interface to manage their repositories. It's built with a Go backend and a React frontend, offering a fast and responsive experience. This tool is particularly useful for developers who work with coding CLI agents and need a way to visually inspect their work on the go.
+Last year, I bought a [DeskMini x600](https://www.asrock.com/nettop/AMD/DeskMini%20X600%20Series/index.asp) and set it up with [Fedora Server](https://www.fedoraproject.org/server/download/) to create a Homelab for my development work. I spend a lot of time working remotely on it from my Mac, phone, and tablet, mostly using Neovim, Zed, or Cursor. While tools like Lazygit, the integrated Git functionality in Zed, and various VS Code extensions are great, I often found myself needing a visual Git client that didn't require me to have the project open in an editor or be in a specific directory. **_I wanted something I could access from anywhere, especially on my phone, to quickly check on the progress of my coding agents or review changes without having to open a terminal._**
+
+This is the story of why Gitty was born. It’s an web-based, support vim motions, and mobile-first Git client designed for developers like me who want a simple, visual way to interact with their repositories without the fuss.
 
 ## Preview
 
-![GitWeb Preview](./images/image_1.png)
-![GitWeb Preview](./images/image_2.jpeg)
+![Gitty Preview](./images/image_2.jpeg)
 
-## Features
+## Development Checklist
 
--   **Repository Management**: Clone existing repositories or initialize new ones.
--   **Visual Diff Viewer**: See the differences between commits, branches, and your working directory.
--   **Commit History**: Browse the commit history of your projects.
--   **Branch Management**: Create, switch, and manage branches.
--   **Staging Area**: Stage and unstage changes with ease.
--   **Mobile-Friendly**: A responsive design that works on mobile devices.
--   **Real-time Updates**: Changes are reflected in real-time.
+This project is a work in progress. Here's a simplified checklist of what's done and what's next. For a more detailed breakdown, please see the [CHECKLIST.md](CHECKLIST.md) file.
 
-## Technology Stack
-
--   **Backend**: Go with the `chi` router
--   **Frontend**: React, Vite, Tailwind CSS, shadcn/ui, Jotai, and React Query
--   **Real-time Communication**: WebSockets
--   **Git Operations**: `go-git` library
-
-## Getting Started
-
-To get started with GitWeb, follow these instructions to set up the project on your local machine.
-
-### Prerequisites
-
--   Go (version 1.18 or higher)
--   Node.js (version 16 or higher)
--   npm
-
-### Installation & Running
-
-1.  **Clone the repository:**
-
-    ```bash
-    git clone https://github.com/your-username/gitweb.git
-    cd gitweb
-    ```
-
-2.  **Run the backend server:**
-
-    Open a terminal and navigate to the `server` directory. Then, run the following command to start the Go server:
-
-    ```bash
-    cd server
-    go run ./cmd/gitweb
-    ```
-
-    The backend server will start on `http://localhost:8080`.
-
-3.  **Run the frontend application:**
-
-    In a new terminal, navigate to the `www` directory and install the dependencies:
-
-    ```bash
-    cd www
-    npm install
-    ```
-
-    Then, start the frontend development server:
-
-    ```bash
-    npm run dev
-    ```
-
-    The frontend will be available at `http://localhost:5173`.
-
-## Architecture
-
-GitWeb is composed of a Go backend that serves a REST API and a React single-page application (SPA) for the frontend. The backend uses the `go-git` library to perform Git operations on the local file system. WebSockets are used for real-time communication between the frontend and backend.
-
-For more details, see the [ARCHITECTURE.md](ARCHITECTURE.md) file.
-
-## Project Status
-
-This project is currently in **Phase 5: Advanced Features**. Most of the core features are implemented. For a detailed list of completed, in-progress, and planned features, please refer to the [CHECKLIST.md](CHECKLIST.md) file.
+-   [x] **Phase 1: Project Setup** (Backend and Frontend foundations)
+-   [x] **Phase 2: Core Backend** (Repository management, Git service)
+-   [x] **Phase 3: Core Frontend** (Layout, repository components, file browsing)
+-   [x] **Phase 4: Git Operations** (Commit history, branch management, staging, diffing)
+-   [ ] **Phase 5: Advanced Features** (Conflict resolution, UI enhancements)
+-   [ ] **Phase 6: Polish & Deployment** (Testing, optimization, containerization)
 
 ## Contributing
 

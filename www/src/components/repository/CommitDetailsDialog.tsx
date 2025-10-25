@@ -94,14 +94,6 @@ export default function CommitDetailsDialog({
           <DialogTitle className="flex items-center gap-2">
             <GitCommit className="h-5 w-5" />
             Commit Details
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              className="ml-auto h-6 w-6 p-0"
-            >
-              <X className="h-4 w-4" />
-            </Button>
           </DialogTitle>
         </DialogHeader>
 
@@ -264,4 +256,3 @@ export default function CommitDetailsDialog({
     </Dialog>
   );
 }
-

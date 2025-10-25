@@ -1,10 +1,14 @@
 import { useAtom } from 'jotai';
-import { activeViewAtom, selectedRepositoryAtom } from '@/store/atoms';
+import {
+    activeViewAtom,
+    selectedRepositoryAtom,
+    showChooseRepositoryDialogAtom,
+} from '@/store/atoms';
 import { useState } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
-import { FolderTree, X } from 'lucide-react';
+import { FolderTree, X, FolderOpen } from 'lucide-react';
 import FileTreeBrowser from '../file/FileTreeBrowser';
 import FileViewer from '../file/FileViewer';
 import CommitHistory from './CommitHistory';
@@ -15,20 +19,20 @@ import WorkingDirectoryChanges from './WorkingDirectoryChanges';
 export default function RepositoryPanel() {
     const [activeView] = useAtom(activeViewAtom);
     const [currentRepository] = useAtom(selectedRepositoryAtom);
+    const [, setShowChooseDialog] = useAtom(showChooseRepositoryDialogAtom);
     const [showFileTree, setShowFileTree] = useState(false);
     const isMobile = useIsMobile();
 
-    // Debug logging
     console.log('RepositoryPanel - currentRepository:', currentRepository);
     console.log('RepositoryPanel - activeView:', activeView);
 
     if (!currentRepository) {
         return (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                    <h2 className="text-lg font-semibold mb-2">No Repository Selected</h2>
-                    <p>Select a repository from the sidebar to get started</p>
-                </div>
+            <div className="flex-1 flex items-center justify-center">
+                <Button size="lg" onClick={() => setShowChooseDialog(true)} className="gap-2">
+                    <FolderOpen className="h-5 w-5" />
+                    Select Repository
+                </Button>
             </div>
         );
     }
@@ -48,7 +52,7 @@ export default function RepositoryPanel() {
                             Browse Files
                         </Button>
                     </div>
-                    
+
                     {/* File viewer takes full space on mobile */}
                     <div className="flex-1">
                         <FileViewer />
