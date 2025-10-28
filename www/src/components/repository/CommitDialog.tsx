@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useAtom } from 'jotai';
 import { selectedRepositoryAtom } from '@/store/atoms';
-import { useRepositoryStatus } from '@/store/queries';
+import { useRepositoryStatus, triggerRepositoryStatus } from '@/store/queries';
 import {
     Dialog,
     DialogContent,
@@ -47,11 +47,16 @@ export default function CommitDialog({ open, onOpenChange }: CommitDialogProps) 
             if (!currentRepository) throw new Error('No repository selected');
             return apiClient.createCommit(currentRepository.id, data);
         },
-        onSuccess: () => {
+        onSuccess: async () => {
+            if (!currentRepository) {
+                return;
+            }
+
             queryClient.invalidateQueries({
-                queryKey: ['repository-status', currentRepository?.id],
+                queryKey: ['repository-status', currentRepository.id],
             });
-            queryClient.invalidateQueries({ queryKey: ['commit-history', currentRepository?.id] });
+            queryClient.invalidateQueries({ queryKey: ['commit-history', currentRepository.id] });
+            await triggerRepositoryStatus(queryClient, currentRepository.id);
             setCommitMessage('');
             setAuthorName('');
             setAuthorEmail('');
