@@ -20,13 +20,21 @@ type RepositoryHandler struct {
 	gitService   *git.Service
 	repositories map[string]*models.Repository
 	dataPath     string
+	watcher      *git.RepositoryWatcher
 }
 
 func NewRepositoryHandler(dataPath string) *RepositoryHandler {
+	watcher, err := git.NewRepositoryWatcher()
+	if err != nil {
+		// Log error but don't fail initialization - we can still function without watching
+		fmt.Printf("Warning: Failed to initialize repository watcher: %v\n", err)
+	}
+
 	return &RepositoryHandler{
 		gitService:   git.NewService(),
 		repositories: make(map[string]*models.Repository),
 		dataPath:     dataPath,
+		watcher:      watcher,
 	}
 }
 
@@ -178,11 +186,20 @@ func (h *RepositoryHandler) DeleteRepository(w http.ResponseWriter, r *http.Requ
 
 func (h *RepositoryHandler) GetRepositoryStatus(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
+	}
+
+	// Long polling: only wait for changes if "wait" query parameter is present
+	// This allows immediate response on first load, and long polling on subsequent requests
+	shouldWait := r.URL.Query().Get("wait") == "true"
+	if shouldWait && h.watcher != nil {
+		// Wait for change notification or timeout (30 seconds)
+		h.watcher.WaitForChange(repo.Path, 30*time.Second)
+		// Whether we got a change or timeout, continue to return current status
 	}
 
 	status, err := h.gitService.GetRepositoryStatus(repo.Path)

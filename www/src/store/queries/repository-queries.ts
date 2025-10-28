@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
+import { useRef } from 'react';
 
 export const useRepositories = () => {
     return useQuery({
@@ -17,11 +18,23 @@ export const useRepository = (id: string | undefined) => {
 };
 
 export const useRepositoryStatus = (id: string | undefined) => {
+    const initialFetchCompleted = useRef(false);
+
     return useQuery({
         queryKey: ['repository-status', id],
-        queryFn: () => apiClient.getRepositoryStatus(id!),
+        queryFn: async () => {
+            // On first fetch, get status immediately (wait=false)
+            // On subsequent refetches, use long polling (wait=true)
+            const shouldWait = initialFetchCompleted.current;
+            const result = await apiClient.getRepositoryStatus(id!, shouldWait);
+            initialFetchCompleted.current = true;
+            return result;
+        },
         enabled: !!id,
-        refetchInterval: 5000, // Refresh status every 5 seconds
+        refetchInterval: 1, // Long polling: refetch immediately after response (server waits up to 30s)
+        refetchIntervalInBackground: true, // Keep polling even when tab is not focused
+        retry: true, // Retry on errors (immediate reconnect)
+        retryDelay: 0, // No delay between retries (immediate reconnect)
     });
 };
 

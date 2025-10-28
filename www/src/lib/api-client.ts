@@ -88,8 +88,9 @@ class ApiClient {
     }
 
     // Repository status and Git operations
-    async getRepositoryStatus(id: string): Promise<RepositoryStatus> {
-        return this.request<RepositoryStatus>(`/repos/${id}/status`);
+    async getRepositoryStatus(id: string, wait = false): Promise<RepositoryStatus> {
+        const url = wait ? `/repos/${id}/status?wait=true` : `/repos/${id}/status`;
+        return this.request<RepositoryStatus>(url);
     }
 
     async getCommitHistory(id: string, limit = 50): Promise<Commit[]> {
