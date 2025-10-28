@@ -187,7 +187,7 @@ export default function ChooseRepositoryDialog() {
                       key={repo.id}
                       variant="ghost"
                       size="sm"
-                      className="flex-shrink-0 md:w-full md:justify-start touch-target h-auto py-2"
+                      className="md:w-full md:justify-start touch-target h-auto py-2 md:shrink md:max-w-full"
                       onClick={() => handleRepositorySelect(repo)}
                     >
                       <div className="flex items-center gap-2 w-full min-w-0">
@@ -211,7 +211,7 @@ export default function ChooseRepositoryDialog() {
                     key={root.path}
                     variant="ghost"
                     size="sm"
-                    className="flex-shrink-0 md:w-full md:justify-start touch-target"
+                    className="md:w-full md:justify-start touch-target md:shrink md:max-w-full"
                     onClick={() => handleRootClick(root)}
                   >
                     {root.name === "/" ? (
