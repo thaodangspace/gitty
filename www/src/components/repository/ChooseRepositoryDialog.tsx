@@ -14,6 +14,7 @@ import {
 } from '@/hooks/api';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { Folder, Home, HardDrive, ChevronUp, Loader2, FolderGit2, X } from 'lucide-react';
 import type { DirectoryEntry, Repository } from '@/types/api';
 
@@ -139,22 +140,40 @@ export default function ChooseRepositoryDialog() {
 
     if (!showDialog) return null;
 
+    const overlayClasses = cn(
+        'fixed inset-0 z-50 flex justify-center md:p-4',
+        isMobile ? 'items-end' : 'items-center'
+    );
+
+    const dialogClasses = cn(
+        'relative bg-background border shadow-lg w-full flex flex-col',
+        isMobile
+            ? 'fixed bottom-0 left-0 right-0 h-[85dvh] max-h-[85dvh] overflow-hidden rounded-t-xl border-b-0 animate-in slide-in-from-bottom-full duration-300'
+            : 'rounded-lg max-w-4xl h-[700px] animate-in fade-in-0 zoom-in-95 duration-200'
+    );
+
+    const contentWrapperClasses = cn(
+        'flex flex-col md:flex-row gap-4 flex-1 min-h-0',
+        isMobile ? 'px-4 pt-4 pb-2' : 'p-6'
+    );
+
+    const selectionSectionClasses = cn(
+        'space-y-4 border-t flex-shrink-0',
+        isMobile ? 'px-4 pt-4 pb-3' : 'p-6'
+    );
+
+    const footerClasses = cn(
+        'flex justify-end gap-2 border-t',
+        isMobile ? 'px-4 py-3' : 'p-6'
+    );
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center md:p-4">
+        <div className={overlayClasses}>
             {/* Backdrop */}
             <div className="fixed inset-0 bg-black/50" onClick={handleCancel} />
 
             {/* Dialog - Bottom drawer on mobile, centered modal on desktop */}
-            <div
-                className={`
-        relative bg-background border shadow-lg w-full flex flex-col
-        ${
-            isMobile
-                ? 'fixed bottom-0 left-0 right-0 h-[85vh] max-h-[85vh] overflow-hidden rounded-t-xl animate-in slide-in-from-bottom-full duration-300'
-                : 'rounded-lg max-w-4xl h-[700px] animate-in fade-in-0 zoom-in-95 duration-200'
-        }
-      `}
-            >
+            <div className={dialogClasses}>
                 {/* Header */}
                 <div className="p-4 md:p-6 border-b">
                     {/* Mobile drag handle */}
@@ -183,7 +202,7 @@ export default function ChooseRepositoryDialog() {
 
                 {/* Content */}
                 <div className="flex-1 overflow-hidden flex flex-col">
-                    <div className="flex flex-col md:flex-row gap-4 flex-1 min-h-0 p-4 md:p-6">
+                    <div className={contentWrapperClasses}>
                         {/* Quick Access sidebar - repositories and volume roots */}
                         <div className="w-full md:w-48 border-b md:border-b-0 md:border-r pb-4 md:pb-0 md:pr-4 flex flex-col gap-4 md:overflow-y-auto">
                             {/* Your Repositories */}
@@ -306,7 +325,7 @@ export default function ChooseRepositoryDialog() {
                     </div>
 
                     {/* Selected repository details */}
-                    <div className="space-y-4 border-t p-4 md:p-6 flex-shrink-0">
+                    <div className={selectionSectionClasses}>
                         <div>
                             <label className="text-sm font-medium">Repository Path</label>
                             <div className="mt-1">
@@ -357,7 +376,7 @@ export default function ChooseRepositoryDialog() {
                 </div>
 
                 {/* Footer */}
-                <div className="flex justify-end gap-2 p-4 md:p-6 border-t">
+                <div className={footerClasses}>
                     <Button variant="outline" onClick={handleCancel} className="touch-target">
                         Cancel
                     </Button>
