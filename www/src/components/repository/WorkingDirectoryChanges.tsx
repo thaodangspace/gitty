@@ -1,21 +1,21 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAtom } from 'jotai';
-import { selectedRepositoryAtom, vimModeEnabledAtom, vimFocusContextAtom, vimFocusIndexAtom } from '@/store/atoms';
+import { selectedRepositoryAtom, vimModeEnabledAtom, vimFocusContextAtom } from '@/store/atoms';
 import { useRepositoryStatus, useStageFile, useUnstageFile } from '@/store/queries';
 import type { FileChange } from '@/types/api';
 import { useVimNavigation } from '@/hooks/use-vim-navigation';
-import { 
-    GitBranch, 
-    FileText, 
-    FilePlus, 
-    FileX, 
-    FileMinus, 
+import {
+    GitBranch,
+    FileText,
+    FilePlus,
+    FileX,
+    FileMinus,
     Plus,
     Minus,
     Clock,
     CheckCircle2,
     Circle,
-    GitCommit
+    GitCommit,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -78,28 +78,40 @@ interface FileChangeItemProps {
     isVimFocused?: boolean;
 }
 
-function FileChangeItem({ file, isStaged = false, onStage, onUnstage, onViewDiff, isVimFocused = false }: FileChangeItemProps) {
+function FileChangeItem({
+    file,
+    isStaged = false,
+    onStage,
+    onUnstage,
+    onViewDiff,
+    isVimFocused = false,
+}: FileChangeItemProps) {
     return (
-        <div className={`flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors ${
-            isVimFocused ? 'ring-2 ring-blue-500 bg-blue-50/50' : ''
-        }`}>
-            <div className="flex-shrink-0">
-                {getStatusIcon(file.status)}
-            </div>
-            
-            <div 
-                className="flex-1 min-w-0 cursor-pointer" 
+        <div
+            className={`flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors ${
+                isVimFocused ? 'ring-2 ring-blue-500 bg-blue-50/50' : ''
+            }`}
+        >
+            <div className="flex-shrink-0">{getStatusIcon(file.status)}</div>
+
+            <div
+                className="flex-1 min-w-0 cursor-pointer"
                 onClick={onViewDiff}
                 title="Click to view changes"
             >
                 <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm truncate hover:text-primary">{file.path}</span>
-                    <Badge variant="outline" className={`h-5 text-xs ${getStatusColor(file.status)}`}>
+                    <span className="font-medium text-sm truncate hover:text-primary">
+                        {file.path}
+                    </span>
+                    <Badge
+                        variant="outline"
+                        className={`h-5 text-xs ${getStatusColor(file.status)}`}
+                    >
                         {getStatusText(file.status)}
                     </Badge>
                 </div>
             </div>
-            
+
             <div className="flex-shrink-0 flex items-center gap-1">
                 <Button
                     variant="ghost"
@@ -144,22 +156,26 @@ interface UntrackedFileItemProps {
 
 function UntrackedFileItem({ fileName, onStage, isVimFocused = false }: UntrackedFileItemProps) {
     return (
-        <div className={`flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors ${
-            isVimFocused ? 'ring-2 ring-blue-500 bg-blue-50/50' : ''
-        }`}>
+        <div
+            className={`flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors ${
+                isVimFocused ? 'ring-2 ring-blue-500 bg-blue-50/50' : ''
+            }`}
+        >
             <div className="flex-shrink-0">
                 <Circle className="h-4 w-4 text-muted-foreground" />
             </div>
-            
+
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm text-muted-foreground truncate">{fileName}</span>
+                    <span className="font-medium text-sm text-muted-foreground truncate">
+                        {fileName}
+                    </span>
                     <Badge variant="outline" className="h-5 text-xs text-muted-foreground">
                         Untracked
                     </Badge>
                 </div>
             </div>
-            
+
             <div className="flex-shrink-0">
                 <Button
                     variant="ghost"
@@ -181,25 +197,35 @@ export default function WorkingDirectoryChanges() {
     const stageFileMutation = useStageFile();
     const unstageFileMutation = useUnstageFile();
     const [showCommitDialog, setShowCommitDialog] = useState(false);
-    const [selectedDiffFile, setSelectedDiffFile] = useState<{ path: string; name: string } | null>(null);
+    const [selectedDiffFile, setSelectedDiffFile] = useState<{
+        path: string;
+        name: string;
+    } | null>(null);
 
     // Vim navigation
     const [vimEnabled] = useAtom(vimModeEnabledAtom);
     const [vimContext, setVimContext] = useAtom(vimFocusContextAtom);
-    const [vimIndex] = useAtom(vimFocusIndexAtom);
+    // No need for vimFocusIndexAtom here; index is handled by useVimNavigation
+
+    // Normalize repo status arrays with explicit typing and stable identities
+    const staged = useMemo(() => (repoStatus?.staged ?? []) as FileChange[], [repoStatus]);
+    const modified = useMemo(() => (repoStatus?.modified ?? []) as FileChange[], [repoStatus]);
+    const untracked = useMemo(() => (repoStatus?.untracked ?? []) as string[], [repoStatus]);
+    const conflicts = useMemo(() => (repoStatus?.conflicts ?? []) as string[], [repoStatus]);
 
     // Create flattened list of all files for vim navigation
     const allFiles = useMemo(() => {
-        if (!repoStatus) return [];
+        const files: Array<{
+            type: 'staged' | 'modified' | 'untracked';
+            data: FileChange | string;
+        }> = [];
 
-        const files: Array<{ type: 'staged' | 'modified' | 'untracked'; data: FileChange | string }> = [];
-
-        repoStatus.staged.forEach(file => files.push({ type: 'staged', data: file }));
-        repoStatus.modified.forEach(file => files.push({ type: 'modified', data: file }));
-        repoStatus.untracked.forEach(file => files.push({ type: 'untracked', data: file }));
+        staged.forEach((file) => files.push({ type: 'staged', data: file }));
+        modified.forEach((file) => files.push({ type: 'modified', data: file }));
+        untracked.forEach((file) => files.push({ type: 'untracked', data: file }));
 
         return files;
-    }, [repoStatus]);
+    }, [staged, modified, untracked]);
 
     const { isVimActive, currentIndex, activateContext } = useVimNavigation({
         context: 'file-changes',
@@ -235,7 +261,7 @@ export default function WorkingDirectoryChanges() {
 
     const handleStageFile = (filePath: string) => {
         if (!currentRepository) return;
-        
+
         stageFileMutation.mutate({
             repositoryId: currentRepository.id,
             filePath,
@@ -244,7 +270,7 @@ export default function WorkingDirectoryChanges() {
 
     const handleUnstageFile = (filePath: string) => {
         if (!currentRepository) return;
-        
+
         unstageFileMutation.mutate({
             repositoryId: currentRepository.id,
             filePath,
@@ -280,7 +306,7 @@ export default function WorkingDirectoryChanges() {
         );
     }
 
-    const totalChanges = repoStatus.staged.length + repoStatus.modified.length + repoStatus.untracked.length;
+    const totalChanges = staged.length + modified.length + untracked.length;
 
     if (totalChanges === 0) {
         return (
@@ -309,14 +335,14 @@ export default function WorkingDirectoryChanges() {
                         <div className="text-sm text-muted-foreground">
                             {totalChanges} {totalChanges === 1 ? 'change' : 'changes'}
                         </div>
-                        {repoStatus.staged.length > 0 && (
-                            <Button 
-                                size="sm" 
+                        {staged.length > 0 && (
+                            <Button
+                                size="sm"
                                 className="h-7"
                                 onClick={() => setShowCommitDialog(true)}
                             >
                                 <GitCommit className="h-3 w-3 mr-1" />
-                                Commit ({repoStatus.staged.length})
+                                Commit ({staged.length})
                             </Button>
                         )}
                     </div>
@@ -326,16 +352,16 @@ export default function WorkingDirectoryChanges() {
             <div className="flex-1 overflow-auto" onClick={handleContainerClick}>
                 <div className="p-4 space-y-6">
                     {/* Staged Changes */}
-                    {repoStatus.staged.length > 0 && (
+                    {staged.length > 0 && (
                         <div>
                             <div className="flex items-center gap-2 mb-3">
                                 <CheckCircle2 className="h-4 w-4 text-green-600" />
                                 <h3 className="text-sm font-semibold text-green-600">
-                                    Staged Changes ({repoStatus.staged.length})
+                                    Staged Changes ({staged.length})
                                 </h3>
                             </div>
                             <div className="space-y-2">
-                                {repoStatus.staged.map((file, index) => {
+                                {staged.map((file, index) => {
                                     const globalIndex = index;
                                     return (
                                         <FileChangeItem
@@ -344,7 +370,9 @@ export default function WorkingDirectoryChanges() {
                                             isStaged={true}
                                             onUnstage={() => handleUnstageFile(file.path)}
                                             onViewDiff={() => handleViewDiff(file.path)}
-                                            isVimFocused={isVimActive && currentIndex === globalIndex}
+                                            isVimFocused={
+                                                isVimActive && currentIndex === globalIndex
+                                            }
                                         />
                                     );
                                 })}
@@ -353,17 +381,17 @@ export default function WorkingDirectoryChanges() {
                     )}
 
                     {/* Modified Files */}
-                    {repoStatus.modified.length > 0 && (
+                    {modified.length > 0 && (
                         <div>
                             <div className="flex items-center gap-2 mb-3">
                                 <Clock className="h-4 w-4 text-orange-600" />
                                 <h3 className="text-sm font-semibold text-orange-600">
-                                    Modified Files ({repoStatus.modified.length})
+                                    Modified Files ({modified.length})
                                 </h3>
                             </div>
                             <div className="space-y-2">
-                                {repoStatus.modified.map((file, index) => {
-                                    const globalIndex = repoStatus.staged.length + index;
+                                {modified.map((file, index) => {
+                                    const globalIndex = staged.length + index;
                                     return (
                                         <FileChangeItem
                                             key={`modified-${index}`}
@@ -371,7 +399,9 @@ export default function WorkingDirectoryChanges() {
                                             isStaged={false}
                                             onStage={() => handleStageFile(file.path)}
                                             onViewDiff={() => handleViewDiff(file.path)}
-                                            isVimFocused={isVimActive && currentIndex === globalIndex}
+                                            isVimFocused={
+                                                isVimActive && currentIndex === globalIndex
+                                            }
                                         />
                                     );
                                 })}
@@ -380,23 +410,25 @@ export default function WorkingDirectoryChanges() {
                     )}
 
                     {/* Untracked Files */}
-                    {repoStatus.untracked.length > 0 && (
+                    {untracked.length > 0 && (
                         <div>
                             <div className="flex items-center gap-2 mb-3">
                                 <Circle className="h-4 w-4 text-muted-foreground" />
                                 <h3 className="text-sm font-semibold text-muted-foreground">
-                                    Untracked Files ({repoStatus.untracked.length})
+                                    Untracked Files ({untracked.length})
                                 </h3>
                             </div>
                             <div className="space-y-2">
-                                {repoStatus.untracked.map((fileName, index) => {
-                                    const globalIndex = repoStatus.staged.length + repoStatus.modified.length + index;
+                                {untracked.map((fileName, index) => {
+                                    const globalIndex = staged.length + modified.length + index;
                                     return (
                                         <UntrackedFileItem
                                             key={`untracked-${index}`}
                                             fileName={fileName}
                                             onStage={() => handleStageFile(fileName)}
-                                            isVimFocused={isVimActive && currentIndex === globalIndex}
+                                            isVimFocused={
+                                                isVimActive && currentIndex === globalIndex
+                                            }
                                         />
                                     );
                                 })}
@@ -405,22 +437,24 @@ export default function WorkingDirectoryChanges() {
                     )}
 
                     {/* Conflicts */}
-                    {repoStatus.conflicts.length > 0 && (
+                    {conflicts.length > 0 && (
                         <div>
                             <div className="flex items-center gap-2 mb-3">
                                 <FileX className="h-4 w-4 text-red-600" />
                                 <h3 className="text-sm font-semibold text-red-600">
-                                    Conflicts ({repoStatus.conflicts.length})
+                                    Conflicts ({conflicts.length})
                                 </h3>
                             </div>
                             <div className="space-y-2">
-                                {repoStatus.conflicts.map((fileName, index) => (
+                                {conflicts.map((fileName, index) => (
                                     <div
                                         key={`conflict-${index}`}
                                         className="flex items-center gap-3 p-3 border border-red-200 bg-red-50 rounded-lg"
                                     >
                                         <FileX className="h-4 w-4 text-red-600" />
-                                        <span className="font-medium text-sm text-red-800">{fileName}</span>
+                                        <span className="font-medium text-sm text-red-800">
+                                            {fileName}
+                                        </span>
                                         <Button variant="outline" size="sm" className="ml-auto">
                                             Resolve
                                         </Button>
@@ -431,11 +465,8 @@ export default function WorkingDirectoryChanges() {
                     )}
                 </div>
             </div>
-            
-            <CommitDialog 
-                open={showCommitDialog} 
-                onOpenChange={setShowCommitDialog} 
-            />
+
+            <CommitDialog open={showCommitDialog} onOpenChange={setShowCommitDialog} />
 
             {/* Diff Viewer */}
             {selectedDiffFile && currentRepository && (

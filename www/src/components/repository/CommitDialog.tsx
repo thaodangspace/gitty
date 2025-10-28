@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAtom } from 'jotai';
 import { selectedRepositoryAtom } from '@/store/atoms';
 import { useRepositoryStatus } from '@/store/queries';
@@ -9,7 +9,7 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    MobileDialogContent
+    MobileDialogContent,
 } from '@/components/ui/dialog';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Drawer } from '@/components/ui/drawer';
@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { GitCommit, Loader2, CheckCircle2 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
+import type { FileChange } from '@/types/api';
 
 interface CommitDialogProps {
     open: boolean;
@@ -31,16 +32,25 @@ export default function CommitDialog({ open, onOpenChange }: CommitDialogProps) 
     const [authorName, setAuthorName] = useState('');
     const [authorEmail, setAuthorEmail] = useState('');
     const isMobile = useIsMobile();
-    
+
     const queryClient = useQueryClient();
-    
+
+    // Normalize repo status arrays to explicit types with stable identity
+    const staged = useMemo(() => (repoStatus?.staged ?? []) as FileChange[], [repoStatus]);
+
     const createCommitMutation = useMutation({
-        mutationFn: async (data: { message: string; files: string[]; author?: { name: string; email: string } }) => {
+        mutationFn: async (data: {
+            message: string;
+            files: string[];
+            author?: { name: string; email: string };
+        }) => {
             if (!currentRepository) throw new Error('No repository selected');
             return apiClient.createCommit(currentRepository.id, data);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['repository-status', currentRepository?.id] });
+            queryClient.invalidateQueries({
+                queryKey: ['repository-status', currentRepository?.id],
+            });
             queryClient.invalidateQueries({ queryKey: ['commit-history', currentRepository?.id] });
             setCommitMessage('');
             setAuthorName('');
@@ -51,15 +61,16 @@ export default function CommitDialog({ open, onOpenChange }: CommitDialogProps) 
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        
-        if (!currentRepository || !commitMessage.trim() || !repoStatus?.staged.length) {
+
+        if (!currentRepository || !commitMessage.trim() || !staged.length) {
             return;
         }
 
-        const stagedFiles = repoStatus.staged.map(file => file.path);
-        const author = authorName.trim() && authorEmail.trim() 
-            ? { name: authorName.trim(), email: authorEmail.trim() }
-            : undefined;
+        const stagedFiles = staged.map((file) => file.path);
+        const author =
+            authorName.trim() && authorEmail.trim()
+                ? { name: authorName.trim(), email: authorEmail.trim() }
+                : undefined;
 
         createCommitMutation.mutate({
             message: commitMessage.trim(),
@@ -79,20 +90,21 @@ export default function CommitDialog({ open, onOpenChange }: CommitDialogProps) 
         }
     };
 
-    const stagedFilesCount = repoStatus?.staged.length || 0;
+    const stagedFilesCount = staged.length || 0;
 
     const dialogContent = (
         <>
             <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                    <GitCommit className={isMobile ? "h-5 w-5" : "h-4 w-4"} />
+                    <GitCommit className={isMobile ? 'h-5 w-5' : 'h-4 w-4'} />
                     Create Commit
                 </DialogTitle>
                 <DialogDescription>
-                    Commit {stagedFilesCount} staged {stagedFilesCount === 1 ? 'file' : 'files'} to {currentRepository?.current_branch}
+                    Commit {stagedFilesCount} staged {stagedFilesCount === 1 ? 'file' : 'files'} to{' '}
+                    {currentRepository?.current_branch}
                 </DialogDescription>
             </DialogHeader>
-            
+
             {stagedFilesCount === 0 ? (
                 <div className="py-6 text-center text-muted-foreground">
                     <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
@@ -115,8 +127,8 @@ export default function CommitDialog({ open, onOpenChange }: CommitDialogProps) 
                                 autoFocus
                             />
                         </div>
-                        
-                        <div className={isMobile ? "grid gap-4" : "grid grid-cols-2 gap-4"}>
+
+                        <div className={isMobile ? 'grid gap-4' : 'grid grid-cols-2 gap-4'}>
                             <div className="grid gap-2">
                                 <label htmlFor="authorName" className="text-sm font-medium">
                                     Author name
@@ -129,7 +141,7 @@ export default function CommitDialog({ open, onOpenChange }: CommitDialogProps) 
                                     disabled={createCommitMutation.isPending}
                                 />
                             </div>
-                            
+
                             <div className="grid gap-2">
                                 <label htmlFor="authorEmail" className="text-sm font-medium">
                                     Author email
@@ -144,14 +156,14 @@ export default function CommitDialog({ open, onOpenChange }: CommitDialogProps) 
                                 />
                             </div>
                         </div>
-                        
-                        {repoStatus?.staged && (
+
+                        {staged.length > 0 && (
                             <div className="grid gap-2">
                                 <label className="text-sm font-medium">
-                                    Staged files ({repoStatus.staged.length})
+                                    Staged files ({staged.length})
                                 </label>
                                 <div className="max-h-32 overflow-y-auto border rounded-md p-2 bg-muted/50">
-                                    {repoStatus.staged.map((file, index) => (
+                                    {staged.map((file, index) => (
                                         <div key={index} className="text-sm py-1 text-green-600">
                                             {file.status} {file.path}
                                         </div>
@@ -159,28 +171,28 @@ export default function CommitDialog({ open, onOpenChange }: CommitDialogProps) 
                                 </div>
                             </div>
                         )}
-                        
+
                         {createCommitMutation.isError && (
                             <p className="text-sm text-red-600">
                                 Failed to create commit: {createCommitMutation.error.message}
                             </p>
                         )}
                     </div>
-                    
-                    <DialogFooter className={isMobile ? "flex-col gap-2" : ""}>
+
+                    <DialogFooter className={isMobile ? 'flex-col gap-2' : ''}>
                         <Button
                             type="button"
                             variant="outline"
                             onClick={() => handleOpenChange(false)}
                             disabled={createCommitMutation.isPending}
-                            className={isMobile ? "w-full" : ""}
+                            className={isMobile ? 'w-full' : ''}
                         >
                             Cancel
                         </Button>
                         <Button
                             type="submit"
                             disabled={!commitMessage.trim() || createCommitMutation.isPending}
-                            className={isMobile ? "w-full" : ""}
+                            className={isMobile ? 'w-full' : ''}
                         >
                             {createCommitMutation.isPending && (
                                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -195,15 +207,11 @@ export default function CommitDialog({ open, onOpenChange }: CommitDialogProps) 
 
     return isMobile ? (
         <Drawer open={open} onOpenChange={handleOpenChange}>
-            <MobileDialogContent>
-                {dialogContent}
-            </MobileDialogContent>
+            <MobileDialogContent>{dialogContent}</MobileDialogContent>
         </Drawer>
     ) : (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent className="sm:max-w-[500px]">
-                {dialogContent}
-            </DialogContent>
+            <DialogContent className="sm:max-w-[500px]">{dialogContent}</DialogContent>
         </Dialog>
     );
 }
