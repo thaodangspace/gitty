@@ -22,7 +22,6 @@ import {
   Loader2,
   FolderGit2,
   X,
-  GitBranch,
 } from "lucide-react";
 import type { DirectoryEntry, Repository } from "@/types/api";
 
@@ -32,7 +31,7 @@ export default function ChooseRepositoryDialog() {
   const [, setSelectedRepository] = useAtom(selectedRepositoryAtom);
   const [, setSelectedRepositoryId] = useAtom(selectedRepositoryIdAtom);
   const [selectedRepo, setSelectedRepo] = useState<DirectoryEntry | null>(null);
-  const [customName, setCustomName] = useState("");
+  const [pathInput, setPathInput] = useState("");
   const isMobile = useIsMobile();
 
   const { data: repositories } = useRepositories();
@@ -49,7 +48,7 @@ export default function ChooseRepositoryDialog() {
     setSelectedRepositoryId(repo.id);
     setShowDialog(false);
     setSelectedRepo(null);
-    setCustomName("");
+    setPathInput("");
     setCurrentDirectory("");
   };
 
@@ -57,7 +56,7 @@ export default function ChooseRepositoryDialog() {
     if (entry.is_directory) {
       if (entry.is_git_repo) {
         setSelectedRepo(entry);
-        setCustomName(entry.name);
+        setPathInput(entry.path);
       } else {
         setCurrentDirectory(entry.path);
       }
@@ -73,38 +72,59 @@ export default function ChooseRepositoryDialog() {
   const handleRootClick = (root: DirectoryEntry) => {
     setCurrentDirectory(root.path);
     setSelectedRepo(null);
-    setCustomName("");
   };
 
   const handleImport = async () => {
-    if (selectedRepo) {
-      try {
-        const importedRepo = await importRepository.mutateAsync({
-          path: selectedRepo.path,
-          name: customName.trim() || selectedRepo.name,
-        });
+    const trimmedPath = pathInput.trim() || selectedRepo?.path;
 
-        // Set the newly imported repository as selected
-        if (importedRepo) {
-          setSelectedRepository(importedRepo);
-          setSelectedRepositoryId(importedRepo.id);
-        }
+    if (!trimmedPath) {
+      return;
+    }
 
-        setShowDialog(false);
-        setSelectedRepo(null);
-        setCustomName("");
-        setCurrentDirectory("");
-      } catch (error) {
-        console.error("Failed to import repository:", error);
+    const fallbackName = selectedRepo?.name || getPathBasename(trimmedPath);
+
+    try {
+      const payload = fallbackName
+        ? { path: trimmedPath, name: fallbackName }
+        : { path: trimmedPath };
+
+      const importedRepo = await importRepository.mutateAsync(payload);
+
+      if (importedRepo) {
+        setSelectedRepository(importedRepo);
+        setSelectedRepositoryId(importedRepo.id);
       }
+
+      setShowDialog(false);
+      setSelectedRepo(null);
+      setPathInput("");
+      setCurrentDirectory("");
+    } catch (error) {
+      console.error("Failed to import repository:", error);
     }
   };
 
   const handleCancel = () => {
     setShowDialog(false);
     setSelectedRepo(null);
-    setCustomName("");
+    setPathInput("");
     setCurrentDirectory("");
+  };
+
+  const handlePathSubmit = () => {
+    const trimmedPath = pathInput.trim();
+
+    if (!trimmedPath) {
+      return;
+    }
+
+    setCurrentDirectory(trimmedPath);
+    setSelectedRepo(null);
+  };
+
+  const handleManualPathChange = (value: string) => {
+    setPathInput(value);
+    setSelectedRepo(null);
   };
 
   if (!showDialog) return null;
@@ -283,10 +303,41 @@ export default function ChooseRepositoryDialog() {
         </div>
 
         {/* Selected repository details */}
-        {selectedRepo && (
-          <div className="space-y-3 border-t p-4 md:p-6">
+        <div className="space-y-4 border-t p-4 md:p-6">
+          <div>
+            <label className="text-sm font-medium">Repository Path</label>
+            <div className="mt-1 flex flex-col gap-2 md:flex-row">
+              <input
+                type="text"
+                value={pathInput}
+                onChange={(e) => handleManualPathChange(e.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    handlePathSubmit();
+                  }
+                }}
+                placeholder="Type or paste the repository path"
+                className="w-full px-3 py-2 border border-input rounded-md bg-background text-sm h-10"
+              />
+              <Button
+                variant="outline"
+                onClick={handlePathSubmit}
+                disabled={!pathInput.trim()}
+                className="touch-target md:w-32"
+              >
+                Browse
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              You can enter a full path or use the browser above to select a
+              repository.
+            </p>
+          </div>
+
+          {selectedRepo && (
             <div className="p-3 bg-muted/30 rounded">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2">
                 <FolderGit2 className="h-4 w-4 text-green-600 flex-shrink-0" />
                 <span className="font-medium">Selected Repository:</span>
                 <span className="text-sm text-muted-foreground truncate">
@@ -294,22 +345,9 @@ export default function ChooseRepositoryDialog() {
                 </span>
               </div>
             </div>
+          )}
 
-            <div>
-              <label className="text-sm font-medium">Repository Name</label>
-              <input
-                type="text"
-                value={customName}
-                onChange={(e) => setCustomName(e.target.value)}
-                placeholder="Enter a name for this repository"
-                className="mt-1 w-full px-3 py-2 border border-input rounded-md bg-background text-sm h-10"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Leave empty to use the folder name: {selectedRepo.name}
-              </p>
-            </div>
-          </div>
-        )}
+        </div>
 
         {/* Footer */}
         <div className="flex justify-end gap-2 p-4 md:p-6 border-t">
@@ -322,7 +360,7 @@ export default function ChooseRepositoryDialog() {
           </Button>
           <Button
             onClick={handleImport}
-            disabled={!selectedRepo || importRepository.isPending}
+            disabled={(!pathInput.trim() && !selectedRepo?.path) || importRepository.isPending}
             className="touch-target"
           >
             {importRepository.isPending ? (
@@ -339,3 +377,14 @@ export default function ChooseRepositoryDialog() {
     </div>
   );
 }
+
+const getPathBasename = (path: string) => {
+  const sanitizedPath = path.replace(/[\\/]+$/, "");
+
+  if (!sanitizedPath) {
+    return "";
+  }
+
+  const segments = sanitizedPath.split(/[\\/]/).filter(Boolean);
+  return segments[segments.length - 1] || "";
+};
