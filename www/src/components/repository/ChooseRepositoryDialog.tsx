@@ -31,7 +31,6 @@ export default function ChooseRepositoryDialog() {
   const [, setSelectedRepository] = useAtom(selectedRepositoryAtom);
   const [, setSelectedRepositoryId] = useAtom(selectedRepositoryIdAtom);
   const [selectedRepo, setSelectedRepo] = useState<DirectoryEntry | null>(null);
-  const [customName, setCustomName] = useState("");
   const [pathInput, setPathInput] = useState("");
   const isMobile = useIsMobile();
 
@@ -49,7 +48,6 @@ export default function ChooseRepositoryDialog() {
     setSelectedRepositoryId(repo.id);
     setShowDialog(false);
     setSelectedRepo(null);
-    setCustomName("");
     setPathInput("");
     setCurrentDirectory("");
   };
@@ -58,7 +56,6 @@ export default function ChooseRepositoryDialog() {
     if (entry.is_directory) {
       if (entry.is_git_repo) {
         setSelectedRepo(entry);
-        setCustomName(entry.name);
         setPathInput(entry.path);
       } else {
         setCurrentDirectory(entry.path);
@@ -75,7 +72,6 @@ export default function ChooseRepositoryDialog() {
   const handleRootClick = (root: DirectoryEntry) => {
     setCurrentDirectory(root.path);
     setSelectedRepo(null);
-    setCustomName("");
   };
 
   const handleImport = async () => {
@@ -86,13 +82,11 @@ export default function ChooseRepositoryDialog() {
     }
 
     const fallbackName = selectedRepo?.name || getPathBasename(trimmedPath);
-    const trimmedName = customName.trim();
 
     try {
-      const payload =
-        trimmedName || fallbackName
-          ? { path: trimmedPath, name: trimmedName || fallbackName }
-          : { path: trimmedPath };
+      const payload = fallbackName
+        ? { path: trimmedPath, name: fallbackName }
+        : { path: trimmedPath };
 
       const importedRepo = await importRepository.mutateAsync(payload);
 
@@ -103,7 +97,6 @@ export default function ChooseRepositoryDialog() {
 
       setShowDialog(false);
       setSelectedRepo(null);
-      setCustomName("");
       setPathInput("");
       setCurrentDirectory("");
     } catch (error) {
@@ -114,7 +107,6 @@ export default function ChooseRepositoryDialog() {
   const handleCancel = () => {
     setShowDialog(false);
     setSelectedRepo(null);
-    setCustomName("");
     setPathInput("");
     setCurrentDirectory("");
   };
@@ -131,26 +123,9 @@ export default function ChooseRepositoryDialog() {
   };
 
   const handleManualPathChange = (value: string) => {
-    const previousDefaultName =
-      selectedRepo?.name || getPathBasename(pathInput.trim());
-    const trimmedValue = value.trim();
-    const derivedName = getPathBasename(trimmedValue);
-
     setPathInput(value);
-
-    if (selectedRepo) {
-      setSelectedRepo(null);
-      setCustomName(derivedName || "");
-      return;
-    }
-
-    if (!customName || customName === previousDefaultName) {
-      setCustomName(derivedName);
-    }
+    setSelectedRepo(null);
   };
-
-  const resolvedDefaultName =
-    selectedRepo?.name || getPathBasename(pathInput.trim() || "");
 
   if (!showDialog) return null;
 
@@ -372,23 +347,6 @@ export default function ChooseRepositoryDialog() {
             </div>
           )}
 
-          <div>
-            <label className="text-sm font-medium">Repository Name</label>
-            <input
-              type="text"
-              value={customName}
-              onChange={(e) => setCustomName(e.target.value)}
-              placeholder="Enter a name for this repository"
-              className="mt-1 w-full px-3 py-2 border border-input rounded-md bg-background text-sm h-10"
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Leave empty to use the folder name
-              {resolvedDefaultName
-                ? `: ${resolvedDefaultName}`
-                : " from the provided path"}
-              .
-            </p>
-          </div>
         </div>
 
         {/* Footer */}
