@@ -54,8 +54,9 @@ func NewRouter(dataPath string) *chi.Mux {
 				
 				r.Post("/stage/*", repoHandler.StageFile)
 				r.Delete("/stage/*", repoHandler.UnstageFile)
-				
+
 				r.Post("/push", repoHandler.Push)
+				r.Post("/push/force", repoHandler.ForcePush)
 				r.Post("/pull", repoHandler.Pull)
 			})
 		})

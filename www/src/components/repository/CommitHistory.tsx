@@ -1,17 +1,29 @@
 import { useState, useEffect } from 'react';
 import { useAtom } from 'jotai';
 import { selectedRepositoryAtom, vimModeEnabledAtom, vimFocusContextAtom, vimFocusIndexAtom } from '@/store/atoms';
-import { useCommitHistory } from '@/store/queries';
+import { useCommitHistory, useRepositoryStatus, usePush } from '@/store/queries';
 import { format } from 'date-fns';
-import { GitCommit, User, Calendar, Hash } from 'lucide-react';
+import { GitCommit, User, Calendar, Hash, Upload, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 import CommitDetailsDialog from './CommitDetailsDialog';
 import { useVimNavigation } from '@/hooks/use-vim-navigation';
 
 export default function CommitHistory() {
     const [currentRepository] = useAtom(selectedRepositoryAtom);
     const { data: commits, isLoading, error } = useCommitHistory(currentRepository?.id);
+    const { data: status } = useRepositoryStatus(currentRepository?.id);
     const [selectedCommitHash, setSelectedCommitHash] = useState<string | null>(null);
+    const [showForcePushWarning, setShowForcePushWarning] = useState(false);
+    const pushMutation = usePush();
 
     // Vim navigation
     const [vimEnabled] = useAtom(vimModeEnabledAtom);
@@ -39,6 +51,20 @@ export default function CommitHistory() {
     const handleContainerClick = () => {
         if (vimEnabled && commits && commits.length > 0) {
             setVimContext('commit-list');
+        }
+    };
+
+    // Push handlers
+    const handlePush = () => {
+        if (currentRepository) {
+            pushMutation.mutate({ repositoryId: currentRepository.id, force: false });
+        }
+    };
+
+    const handleForcePush = () => {
+        if (currentRepository) {
+            pushMutation.mutate({ repositoryId: currentRepository.id, force: true });
+            setShowForcePushWarning(false);
         }
     };
 
@@ -84,8 +110,43 @@ export default function CommitHistory() {
                         <GitCommit className="h-5 w-5" />
                         Commit History
                     </h2>
-                    <div className="text-sm text-muted-foreground">
-                        {commits.length} commits
+                    <div className="flex items-center gap-3">
+                        <div className="text-sm text-muted-foreground">
+                            {commits.length} commits
+                        </div>
+                        {status && status.ahead > 0 && (
+                            <div className="flex items-center gap-2">
+                                <Badge variant="secondary" className="flex items-center gap-1">
+                                    <Upload className="h-3 w-3" />
+                                    {status.ahead} to push
+                                </Badge>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button
+                                            size="sm"
+                                            disabled={pushMutation.isPending}
+                                            className="h-8"
+                                        >
+                                            <Upload className="h-4 w-4 mr-2" />
+                                            {pushMutation.isPending ? 'Pushing...' : 'Push'}
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        <DropdownMenuItem onClick={handlePush}>
+                                            Push to remote
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                            onClick={() => setShowForcePushWarning(true)}
+                                            className="text-red-600 focus:text-red-600"
+                                        >
+                                            <AlertTriangle className="h-4 w-4 mr-2" />
+                                            Force push
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -146,7 +207,38 @@ export default function CommitHistory() {
                     ))}
                 </div>
             </div>
-            
+
+            {/* Force Push Warning */}
+            {showForcePushWarning && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-background border rounded-lg shadow-lg max-w-md w-full p-6">
+                        <Alert variant="destructive" className="mb-4">
+                            <AlertTriangle className="h-4 w-4" />
+                            <AlertTitle>Warning: Force Push</AlertTitle>
+                            <AlertDescription>
+                                Force pushing will overwrite the remote history. This action cannot be undone
+                                and may cause problems for other collaborators.
+                            </AlertDescription>
+                        </Alert>
+                        <div className="flex justify-end gap-2">
+                            <Button
+                                variant="outline"
+                                onClick={() => setShowForcePushWarning(false)}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                onClick={handleForcePush}
+                                disabled={pushMutation.isPending}
+                            >
+                                {pushMutation.isPending ? 'Force Pushing...' : 'Force Push'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <CommitDetailsDialog
                 commitHash={selectedCommitHash}
                 isOpen={!!selectedCommitHash}

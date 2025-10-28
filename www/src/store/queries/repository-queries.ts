@@ -119,12 +119,25 @@ export const useStageFile = () => {
 
 export const useUnstageFile = () => {
     const queryClient = useQueryClient();
-    
+
     return useMutation({
         mutationFn: ({ repositoryId, filePath }: { repositoryId: string; filePath: string }) =>
             apiClient.unstageFile(repositoryId, filePath),
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: ['repository-status', variables.repositoryId] });
+        },
+    });
+};
+
+export const usePush = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ repositoryId, force }: { repositoryId: string; force?: boolean }) =>
+            force ? apiClient.forcePush(repositoryId) : apiClient.push(repositoryId),
+        onSuccess: (_data, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['repository-status', variables.repositoryId] });
+            queryClient.invalidateQueries({ queryKey: ['commit-history', variables.repositoryId] });
         },
     });
 };

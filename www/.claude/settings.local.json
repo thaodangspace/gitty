@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//home/dt/Code/gitweb/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

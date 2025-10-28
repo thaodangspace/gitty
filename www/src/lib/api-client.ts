@@ -136,6 +136,12 @@ class ApiClient {
         });
     }
 
+    async forcePush(id: string): Promise<void> {
+        return this.request<void>(`/repos/${id}/push/force`, {
+            method: 'POST',
+        });
+    }
+
     async pull(id: string): Promise<void> {
         return this.request<void>(`/repos/${id}/pull`, {
             method: 'POST',

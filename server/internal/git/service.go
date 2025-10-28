@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -89,6 +90,68 @@ func (s *Service) GetRepositoryStatus(repoPath string) (*models.RepositoryStatus
 		}
 	}
 
+	// Calculate ahead/behind counts
+	ahead, behind := 0, 0
+	if head.Name().IsBranch() {
+		// Get the remote tracking branch
+		remoteBranchName := plumbing.NewRemoteReferenceName("origin", currentBranch)
+		remoteBranchRef, err := repo.Reference(remoteBranchName, true)
+
+		if err == nil {
+			// Remote branch exists, calculate ahead/behind
+			localCommit, err := repo.CommitObject(head.Hash())
+			if err == nil {
+				remoteCommit, err := repo.CommitObject(remoteBranchRef.Hash())
+				if err == nil {
+					// Count commits ahead (local commits not in remote)
+					commitIter, err := repo.Log(&git.LogOptions{
+						From: head.Hash(),
+					})
+					if err == nil {
+						err = commitIter.ForEach(func(commit *object.Commit) error {
+							if commit.Hash == remoteCommit.Hash {
+								return fmt.Errorf("found common ancestor")
+							}
+							ahead++
+							return nil
+						})
+						// Reset ahead if we didn't find the remote commit (diverged branches)
+						if err != nil && err.Error() != "found common ancestor" {
+							ahead = 0
+						}
+					}
+
+					// Count commits behind (remote commits not in local)
+					commitIter, err = repo.Log(&git.LogOptions{
+						From: remoteBranchRef.Hash(),
+					})
+					if err == nil {
+						err = commitIter.ForEach(func(commit *object.Commit) error {
+							if commit.Hash == localCommit.Hash {
+								return fmt.Errorf("found common ancestor")
+							}
+							behind++
+							return nil
+						})
+						// Reset behind if we didn't find the local commit (diverged branches)
+						if err != nil && err.Error() != "found common ancestor" {
+							behind = 0
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Sort files alphabetically for consistent ordering
+	sort.Slice(staged, func(i, j int) bool {
+		return staged[i].Path < staged[j].Path
+	})
+	sort.Slice(modified, func(i, j int) bool {
+		return modified[i].Path < modified[j].Path
+	})
+	sort.Strings(untracked)
+
 	return &models.RepositoryStatus{
 		Branch:    currentBranch,
 		IsClean:   status.IsClean(),
@@ -96,8 +159,8 @@ func (s *Service) GetRepositoryStatus(repoPath string) (*models.RepositoryStatus
 		Modified:  modified,
 		Untracked: untracked,
 		Conflicts: []string{},
-		Ahead:     0,
-		Behind:    0,
+		Ahead:     ahead,
+		Behind:    behind,
 	}, nil
 }
 
@@ -366,6 +429,22 @@ func (s *Service) Push(repoPath string) error {
 	err = repo.Push(&git.PushOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to push: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) ForcePush(repoPath string) error {
+	repo, err := s.OpenRepository(repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	err = repo.Push(&git.PushOptions{
+		Force: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to force push: %w", err)
 	}
 
 	return nil

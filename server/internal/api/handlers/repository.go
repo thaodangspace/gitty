@@ -392,7 +392,7 @@ func (h *RepositoryHandler) SaveFileContent(w http.ResponseWriter, r *http.Reque
 
 func (h *RepositoryHandler) Push(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
@@ -407,6 +407,25 @@ func (h *RepositoryHandler) Push(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"message": "Push completed successfully"}`))
+}
+
+func (h *RepositoryHandler) ForcePush(w http.ResponseWriter, r *http.Request) {
+	repoID := chi.URLParam(r, "id")
+
+	repo, exists := h.repositories[repoID]
+	if !exists {
+		http.Error(w, "Repository not found", http.StatusNotFound)
+		return
+	}
+
+	err := h.gitService.ForcePush(repo.Path)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to force push: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"message": "Force push completed successfully"}`))
 }
 
 func (h *RepositoryHandler) ImportRepository(w http.ResponseWriter, r *http.Request) {
