@@ -140,7 +140,7 @@ export default function ChooseRepositoryDialog() {
         relative bg-background border shadow-lg w-full flex flex-col
         ${
           isMobile
-            ? "fixed bottom-0 left-0 right-0 h-[85vh] rounded-t-xl animate-in slide-in-from-bottom-full duration-300"
+            ? "fixed bottom-0 left-0 right-0 h-[85vh] max-h-[85vh] overflow-hidden rounded-t-xl animate-in slide-in-from-bottom-full duration-300"
             : "rounded-lg max-w-4xl h-[700px] animate-in fade-in-0 zoom-in-95 duration-200"
         }
       `}
@@ -174,179 +174,180 @@ export default function ChooseRepositoryDialog() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex flex-col md:flex-row gap-4 min-h-0 p-4 md:p-6">
-          {/* Quick Access sidebar - repositories and volume roots */}
-          <div className="w-full md:w-48 border-b md:border-b-0 md:border-r pb-4 md:pb-0 md:pr-4 flex flex-col gap-4">
-            {/* Your Repositories */}
-            {repositories && repositories.length > 0 && (
+        <div className="flex-1 overflow-y-auto md:overflow-visible">
+          <div className="flex flex-col md:flex-row gap-4 min-h-0 p-4 md:p-6">
+            {/* Quick Access sidebar - repositories and volume roots */}
+            <div className="w-full md:w-48 border-b md:border-b-0 md:border-r pb-4 md:pb-0 md:pr-4 flex flex-col gap-4">
+              {/* Your Repositories */}
+              {repositories && repositories.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Your Repositories</h4>
+                  <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-x-visible">
+                    {repositories.map((repo) => (
+                      <Button
+                        key={repo.id}
+                        variant="ghost"
+                        size="sm"
+                        className="flex-shrink-0 md:w-full md:justify-start touch-target h-auto py-2"
+                        onClick={() => handleRepositorySelect(repo)}
+                      >
+                        <div className="flex items-center gap-2 w-full min-w-0">
+                          <Folder className="h-4 w-4 flex-shrink-0" />
+                          <div className="min-w-0 flex-1 text-left">
+                            <div className="text-sm truncate">{repo.name}</div>
+                          </div>
+                        </div>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Import New Repository */}
               <div>
-                <h4 className="text-sm font-medium mb-2">Your Repositories</h4>
-                <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-x-visible">
-                  {repositories.map((repo) => (
+                <h4 className="text-sm font-medium mb-2">Quick Access</h4>
+                <div className="flex md:flex-col gap-2 md:gap-1 overflow-x-auto md:overflow-x-visible">
+                  {volumeRoots?.roots.map((root) => (
                     <Button
-                      key={repo.id}
+                      key={root.path}
                       variant="ghost"
                       size="sm"
-                      className="flex-shrink-0 md:w-full md:justify-start touch-target h-auto py-2"
-                      onClick={() => handleRepositorySelect(repo)}
+                      className="flex-shrink-0 md:w-full md:justify-start touch-target"
+                      onClick={() => handleRootClick(root)}
                     >
-                      <div className="flex items-center gap-2 w-full min-w-0">
-                        <Folder className="h-4 w-4 flex-shrink-0" />
-                        <div className="min-w-0 flex-1 text-left">
-                          <div className="text-sm truncate">{repo.name}</div>
-                        </div>
-                      </div>
+                      {root.name === "/" ? (
+                        <HardDrive className="h-4 w-4 mr-2" />
+                      ) : root.name === "Home" ? (
+                        <Home className="h-4 w-4 mr-2" />
+                      ) : (
+                        <HardDrive className="h-4 w-4 mr-2" />
+                      )}
+                      <span className="truncate">{root.name}</span>
                     </Button>
                   ))}
                 </div>
               </div>
-            )}
-
-            {/* Import New Repository */}
-            <div>
-              <h4 className="text-sm font-medium mb-2">Quick Access</h4>
-              <div className="flex md:flex-col gap-2 md:gap-1 overflow-x-auto md:overflow-x-visible">
-                {volumeRoots?.roots.map((root) => (
-                  <Button
-                    key={root.path}
-                    variant="ghost"
-                    size="sm"
-                    className="flex-shrink-0 md:w-full md:justify-start touch-target"
-                    onClick={() => handleRootClick(root)}
-                  >
-                    {root.name === "/" ? (
-                      <HardDrive className="h-4 w-4 mr-2" />
-                    ) : root.name === "Home" ? (
-                      <Home className="h-4 w-4 mr-2" />
-                    ) : (
-                      <HardDrive className="h-4 w-4 mr-2" />
-                    )}
-                    <span className="truncate">{root.name}</span>
-                  </Button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Directory browser */}
-          <div className="flex-1 flex flex-col min-w-0">
-            {/* Current path */}
-            <div className="mb-3">
-              <div className="flex items-center gap-2 p-3 bg-muted/50 rounded text-sm">
-                <Folder className="h-4 w-4 flex-shrink-0" />
-                <span className="truncate">
-                  {directoryListing?.current_path || "Select a location"}
-                </span>
-              </div>
             </div>
 
-            {/* Navigation */}
-            <div className="flex items-center gap-2 mb-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleParentDirectory}
-                disabled={!directoryListing?.can_go_up}
-                className="touch-target"
-              >
-                <ChevronUp className="h-4 w-4 mr-1" />
-                Up
-              </Button>
-            </div>
-
-            {/* Directory listing */}
-            <div className="flex-1 border rounded overflow-auto">
-              {isLoading ? (
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="h-6 w-6 animate-spin" />
+            {/* Directory browser */}
+            <div className="flex-1 flex flex-col min-w-0">
+              {/* Current path */}
+              <div className="mb-3">
+                <div className="flex items-center gap-2 p-3 bg-muted/50 rounded text-sm">
+                  <Folder className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">
+                    {directoryListing?.current_path || "Select a location"}
+                  </span>
                 </div>
-              ) : error ? (
-                <div className="p-4 text-red-500 text-sm">
-                  Failed to load directory
-                </div>
-              ) : (
-                <div className="p-2">
-                  {directoryListing?.entries
-                    .filter((entry) => entry.is_directory && !entry.is_hidden)
-                    .map((entry) => (
-                      <Button
-                        key={entry.path}
-                        variant={
-                          selectedRepo?.path === entry.path
-                            ? "secondary"
-                            : "ghost"
-                        }
-                        className="w-full justify-start mb-1 h-auto p-3 touch-target"
-                        onClick={() => handleDirectoryClick(entry)}
-                      >
-                        <div className="flex items-center gap-3 w-full">
-                          {entry.is_git_repo ? (
-                            <FolderGit2 className="h-4 w-4 text-green-600 flex-shrink-0" />
-                          ) : (
-                            <Folder className="h-4 w-4 flex-shrink-0" />
-                          )}
-                          <span className="truncate text-left flex-1">
-                            {entry.name}
-                          </span>
-                          {entry.is_git_repo && (
-                            <span className="text-xs text-green-600 font-medium flex-shrink-0">
-                              Git Repository
+              </div>
+
+              {/* Navigation */}
+              <div className="flex items-center gap-2 mb-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleParentDirectory}
+                  disabled={!directoryListing?.can_go_up}
+                  className="touch-target"
+                >
+                  <ChevronUp className="h-4 w-4 mr-1" />
+                  Up
+                </Button>
+              </div>
+
+              {/* Directory listing */}
+              <div className="flex-1 border rounded overflow-auto">
+                {isLoading ? (
+                  <div className="flex items-center justify-center p-8">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : error ? (
+                  <div className="p-4 text-red-500 text-sm">
+                    Failed to load directory
+                  </div>
+                ) : (
+                  <div className="p-2">
+                    {directoryListing?.entries
+                      .filter((entry) => entry.is_directory && !entry.is_hidden)
+                      .map((entry) => (
+                        <Button
+                          key={entry.path}
+                          variant={
+                            selectedRepo?.path === entry.path
+                              ? "secondary"
+                              : "ghost"
+                          }
+                          className="w-full justify-start mb-1 h-auto p-3 touch-target"
+                          onClick={() => handleDirectoryClick(entry)}
+                        >
+                          <div className="flex items-center gap-3 w-full">
+                            {entry.is_git_repo ? (
+                              <FolderGit2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                            ) : (
+                              <Folder className="h-4 w-4 flex-shrink-0" />
+                            )}
+                            <span className="truncate text-left flex-1">
+                              {entry.name}
                             </span>
-                          )}
-                        </div>
-                      </Button>
-                    ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Selected repository details */}
-        <div className="space-y-4 border-t p-4 md:p-6">
-          <div>
-            <label className="text-sm font-medium">Repository Path</label>
-            <div className="mt-1 flex flex-col gap-2 md:flex-row">
-              <input
-                type="text"
-                value={pathInput}
-                onChange={(e) => handleManualPathChange(e.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    handlePathSubmit();
-                  }
-                }}
-                placeholder="Type or paste the repository path"
-                className="w-full px-3 py-2 border border-input rounded-md bg-background text-sm h-10"
-              />
-              <Button
-                variant="outline"
-                onClick={handlePathSubmit}
-                disabled={!pathInput.trim()}
-                className="touch-target md:w-32"
-              >
-                Browse
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              You can enter a full path or use the browser above to select a
-              repository.
-            </p>
-          </div>
-
-          {selectedRepo && (
-            <div className="p-3 bg-muted/30 rounded">
-              <div className="flex items-center gap-2">
-                <FolderGit2 className="h-4 w-4 text-green-600 flex-shrink-0" />
-                <span className="font-medium">Selected Repository:</span>
-                <span className="text-sm text-muted-foreground truncate">
-                  {selectedRepo.path}
-                </span>
+                            {entry.is_git_repo && (
+                              <span className="text-xs text-green-600 font-medium flex-shrink-0">
+                                Git Repository
+                              </span>
+                            )}
+                          </div>
+                        </Button>
+                      ))}
+                  </div>
+                )}
               </div>
             </div>
-          )}
+          </div>
 
+          {/* Selected repository details */}
+          <div className="space-y-4 border-t p-4 md:p-6">
+            <div>
+              <label className="text-sm font-medium">Repository Path</label>
+              <div className="mt-1 flex flex-col gap-2 md:flex-row">
+                <input
+                  type="text"
+                  value={pathInput}
+                  onChange={(e) => handleManualPathChange(e.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handlePathSubmit();
+                    }
+                  }}
+                  placeholder="Type or paste the repository path"
+                  className="w-full px-3 py-2 border border-input rounded-md bg-background text-sm h-10"
+                />
+                <Button
+                  variant="outline"
+                  onClick={handlePathSubmit}
+                  disabled={!pathInput.trim()}
+                  className="touch-target md:w-32"
+                >
+                  Browse
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                You can enter a full path or use the browser above to select a
+                repository.
+              </p>
+            </div>
+
+            {selectedRepo && (
+              <div className="p-3 bg-muted/30 rounded">
+                <div className="flex items-center gap-2">
+                  <FolderGit2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                  <span className="font-medium">Selected Repository:</span>
+                  <span className="text-sm text-muted-foreground truncate">
+                    {selectedRepo.path}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Footer */}
