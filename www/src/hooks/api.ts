@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, QueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api-client';
 import type { CreateRepositoryRequest, CommitRequest } from '../types/api';
 
@@ -13,6 +13,22 @@ export const queryKeys = {
     fileContent: (id: string, path: string) => ['repository', id, 'file', path] as const,
     directoryBrowse: (path?: string) => ['filesystem', 'browse', path] as const,
     volumeRoots: ['filesystem', 'roots'] as const,
+};
+
+const triggerRepositoryStatus = async (
+    queryClient: QueryClient,
+    repositoryId: string | undefined
+) => {
+    if (!repositoryId) {
+        return;
+    }
+
+    try {
+        const status = await apiClient.getRepositoryStatus(repositoryId, false);
+        queryClient.setQueryData(queryKeys.repositoryStatus(repositoryId), status);
+    } catch (error) {
+        console.error('Failed to trigger repository status refresh', error);
+    }
 };
 
 // Repository queries
@@ -127,9 +143,10 @@ export const useCreateCommit = () => {
     return useMutation({
         mutationFn: ({ id, data }: { id: string; data: CommitRequest }) =>
             apiClient.createCommit(id, data),
-        onSuccess: (_, { id }) => {
+        onSuccess: async (_, { id }) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.repositoryStatus(id) });
             queryClient.invalidateQueries({ queryKey: queryKeys.commitHistory(id) });
+            await triggerRepositoryStatus(queryClient, id);
         },
     });
 };
@@ -140,8 +157,10 @@ export const useCreateBranch = () => {
     return useMutation({
         mutationFn: ({ id, name }: { id: string; name: string }) =>
             apiClient.createBranch(id, name),
-        onSuccess: (_, { id }) => {
+        onSuccess: async (_, { id }) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.branches(id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.repositoryStatus(id) });
+            await triggerRepositoryStatus(queryClient, id);
         },
     });
 };
@@ -152,10 +171,11 @@ export const useSwitchBranch = () => {
     return useMutation({
         mutationFn: ({ id, branch }: { id: string; branch: string }) =>
             apiClient.switchBranch(id, branch),
-        onSuccess: (_, { id }) => {
+        onSuccess: async (_, { id }) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.repository(id) });
             queryClient.invalidateQueries({ queryKey: queryKeys.repositoryStatus(id) });
             queryClient.invalidateQueries({ queryKey: queryKeys.fileTree(id) });
+            await triggerRepositoryStatus(queryClient, id);
         },
     });
 };
@@ -165,8 +185,9 @@ export const usePush = () => {
 
     return useMutation({
         mutationFn: (id: string) => apiClient.push(id),
-        onSuccess: (_, id) => {
+        onSuccess: async (_, id) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.repositoryStatus(id) });
+            await triggerRepositoryStatus(queryClient, id);
         },
     });
 };
@@ -176,11 +197,12 @@ export const usePull = () => {
 
     return useMutation({
         mutationFn: (id: string) => apiClient.pull(id),
-        onSuccess: (_, id) => {
+        onSuccess: async (_, id) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.repository(id) });
             queryClient.invalidateQueries({ queryKey: queryKeys.repositoryStatus(id) });
             queryClient.invalidateQueries({ queryKey: queryKeys.fileTree(id) });
             queryClient.invalidateQueries({ queryKey: queryKeys.commitHistory(id) });
+            await triggerRepositoryStatus(queryClient, id);
         },
     });
 };
@@ -198,9 +220,10 @@ export const useSaveFile = () => {
             filePath: string;
             content: string;
         }) => apiClient.saveFileContent(id, filePath, content),
-        onSuccess: (_, { id, filePath }) => {
+        onSuccess: async (_, { id, filePath }) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.fileContent(id, filePath) });
             queryClient.invalidateQueries({ queryKey: queryKeys.repositoryStatus(id) });
+            await triggerRepositoryStatus(queryClient, id);
         },
     });
 };
