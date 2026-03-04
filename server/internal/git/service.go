@@ -490,6 +490,25 @@ func (s *Service) StageFile(repoPath, filePath string) error {
 	return nil
 }
 
+func (s *Service) StageAll(repoPath string) error {
+	repo, err := s.OpenRepository(repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	_, err = worktree.Add(".")
+	if err != nil {
+		return fmt.Errorf("failed to stage all files: %w", err)
+	}
+
+	return nil
+}
+
 func (s *Service) UnstageFile(repoPath, filePath string) error {
 	repo, err := s.OpenRepository(repoPath)
 	if err != nil {
@@ -501,26 +520,12 @@ func (s *Service) UnstageFile(repoPath, filePath string) error {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
 
-	err = worktree.Reset(&git.ResetOptions{
-		Mode: git.MixedReset,
+	err = worktree.Restore(&git.RestoreOptions{
+		Staged: true,
+		Files:  []string{filePath},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to unstage file: %w", err)
-	}
-
-	// Re-add all files except the one we want to unstage
-	status, err := worktree.Status()
-	if err != nil {
-		return fmt.Errorf("failed to get status: %w", err)
-	}
-
-	for file, fileStatus := range status {
-		if file != filePath && fileStatus.Staging != git.Unmodified {
-			_, err = worktree.Add(file)
-			if err != nil {
-				return fmt.Errorf("failed to re-stage file %s: %w", file, err)
-			}
-		}
 	}
 
 	return nil
@@ -591,23 +596,32 @@ func (s *Service) GetCommitDetails(repoPath, commitHash string) (*models.CommitD
 			additions := 0
 			deletions := 0
 			for _, chunk := range filePatch.Chunks() {
+				content := chunk.Content()
+				if content == "" {
+					continue
+				}
+				lines := strings.Split(content, "\n")
 				switch chunk.Type() {
 				case diff.Add:
-					lines := strings.Split(chunk.Content(), "\n")
 					for _, line := range lines {
 						if line == "" {
 							continue
 						}
-						patchBuilder.WriteString("+" + line + "\n")
+						if !strings.HasPrefix(line, "+") {
+							line = "+" + line
+						}
+						patchBuilder.WriteString(line + "\n")
 						additions++
 					}
 				case diff.Delete:
-					lines := strings.Split(chunk.Content(), "\n")
 					for _, line := range lines {
 						if line == "" {
 							continue
 						}
-						patchBuilder.WriteString("-" + line + "\n")
+						if !strings.HasPrefix(line, "-") {
+							line = "-" + line
+						}
+						patchBuilder.WriteString(line + "\n")
 						deletions++
 					}
 				}

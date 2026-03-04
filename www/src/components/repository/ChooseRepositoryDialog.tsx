@@ -3,8 +3,6 @@ import { useAtom } from 'jotai';
 import {
     showChooseRepositoryDialogAtom,
     currentDirectoryAtom,
-    selectedRepositoryAtom,
-    selectedRepositoryIdAtom,
 } from '@/store/atoms';
 import {
     useDirectoryBrowse,
@@ -17,12 +15,12 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Folder, Home, HardDrive, ChevronUp, Loader2, FolderGit2, X } from 'lucide-react';
 import type { DirectoryEntry, Repository } from '@/types/api';
+import { useNavigate } from 'react-router-dom';
 
 export default function ChooseRepositoryDialog() {
     const [showDialog, setShowDialog] = useAtom(showChooseRepositoryDialogAtom);
     const [currentDirectory, setCurrentDirectory] = useAtom(currentDirectoryAtom);
-    const [, setSelectedRepository] = useAtom(selectedRepositoryAtom);
-    const [, setSelectedRepositoryId] = useAtom(selectedRepositoryIdAtom);
+    const navigate = useNavigate();
     const [selectedRepo, setSelectedRepo] = useState<DirectoryEntry | null>(null);
     const [pathInput, setPathInput] = useState('');
     const [isPathReadonly, setIsPathReadonly] = useState(true);
@@ -34,8 +32,7 @@ export default function ChooseRepositoryDialog() {
     const importRepository = useImportRepository();
 
     const handleRepositorySelect = (repo: Repository) => {
-        setSelectedRepository(repo);
-        setSelectedRepositoryId(repo.id);
+        navigate(`/repo/${repo.id}`);
         setShowDialog(false);
         setSelectedRepo(null);
         setPathInput('');
@@ -88,8 +85,7 @@ export default function ChooseRepositoryDialog() {
             const importedRepo = await importRepository.mutateAsync(payload);
 
             if (importedRepo) {
-                setSelectedRepository(importedRepo);
-                setSelectedRepositoryId(importedRepo.id);
+                navigate(`/repo/${importedRepo.id}`);
             }
 
             setShowDialog(false);

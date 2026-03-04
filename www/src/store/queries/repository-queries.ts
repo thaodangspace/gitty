@@ -152,6 +152,19 @@ export const useStageFile = () => {
     });
 };
 
+export const useStageAllFiles = () => {
+    const queryClient = useQueryClient();
+    
+    return useMutation({
+        mutationFn: ({ repositoryId }: { repositoryId: string }) =>
+            apiClient.stageAllFiles(repositoryId),
+        onSuccess: async (_data, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['repository-status', variables.repositoryId] });
+            await triggerRepositoryStatus(queryClient, variables.repositoryId);
+        },
+    });
+};
+
 export const useUnstageFile = () => {
     const queryClient = useQueryClient();
 

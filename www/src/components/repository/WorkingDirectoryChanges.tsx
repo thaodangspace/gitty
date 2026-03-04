@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAtom } from 'jotai';
 import { selectedRepositoryAtom, vimModeEnabledAtom, vimFocusContextAtom } from '@/store/atoms';
-import { useRepositoryStatus, useStageFile, useUnstageFile } from '@/store/queries';
+import { useRepositoryStatus, useStageFile, useUnstageFile, useStageAllFiles } from '@/store/queries';
 import type { FileChange } from '@/types/api';
 import { useVimNavigation } from '@/hooks/use-vim-navigation';
 import {
@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import CommitDialog from './CommitDialog';
 import DiffViewer from '../file/DiffViewer';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const getStatusIcon = (status: string) => {
     switch (status) {
@@ -196,6 +197,8 @@ export default function WorkingDirectoryChanges() {
     const { data: repoStatus, isLoading, error } = useRepositoryStatus(currentRepository?.id);
     const stageFileMutation = useStageFile();
     const unstageFileMutation = useUnstageFile();
+    const stageAllFilesMutation = useStageAllFiles();
+    const [stageAllChecked, setStageAllChecked] = useState(false);
     const [showCommitDialog, setShowCommitDialog] = useState(false);
     const [selectedDiffFile, setSelectedDiffFile] = useState<{
         path: string;
@@ -268,6 +271,15 @@ export default function WorkingDirectoryChanges() {
         });
     };
 
+    const handleStageAllFiles = () => {
+        if (!currentRepository) return;
+
+        stageAllFilesMutation.mutate({
+            repositoryId: currentRepository.id,
+        });
+        setStageAllChecked(true);
+    };
+
     const handleUnstageFile = (filePath: string) => {
         if (!currentRepository) return;
 
@@ -324,10 +336,25 @@ export default function WorkingDirectoryChanges() {
         <div className="h-full flex flex-col">
             <div className="p-4 border-b bg-muted/50">
                 <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold flex items-center gap-2">
-                        <GitBranch className="h-5 w-5" />
-                        Changes
-                    </h2>
+                    <div className="flex items-center gap-2">
+                        <Checkbox
+                            id="stage-all"
+                            checked={stageAllChecked || staged.length > 0}
+                            onCheckedChange={(checked: boolean) => {
+                                if (checked) {
+                                    handleStageAllFiles();
+                                }
+                            }}
+                            disabled={stageAllFilesMutation.isPending}
+                        />
+                        <label
+                            htmlFor="stage-all"
+                            className="text-lg font-semibold flex items-center gap-2 cursor-pointer"
+                        >
+                            <GitBranch className="h-5 w-5" />
+                            Changes
+                        </label>
+                    </div>
                     <div className="flex items-center gap-2">
                         <Badge variant="secondary" className="h-6">
                             {repoStatus.branch}

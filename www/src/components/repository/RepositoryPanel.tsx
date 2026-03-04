@@ -12,7 +12,6 @@ import { FolderTree, X, FolderOpen } from 'lucide-react';
 import FileTreeBrowser from '../file/FileTreeBrowser';
 import FileViewer from '../file/FileViewer';
 import CommitHistory from './CommitHistory';
-import CommitTree from './CommitTree';
 import BranchList from './BranchList';
 import WorkingDirectoryChanges from './WorkingDirectoryChanges';
 
@@ -99,8 +98,6 @@ export default function RepositoryPanel() {
 
     const renderHistoryView = () => <CommitHistory />;
 
-    const renderTreeView = () => <CommitTree />;
-
     const renderBranchesView = () => <BranchList />;
 
     const renderStatusView = () => <WorkingDirectoryChanges />;
@@ -120,8 +117,6 @@ export default function RepositoryPanel() {
                 return renderFilesView();
             case 'history':
                 return renderHistoryView();
-            case 'tree':
-                return renderTreeView();
             case 'branches':
                 return renderBranchesView();
             case 'status':

@@ -11,15 +11,13 @@ import {
 import type { ActiveView } from '@/store/atoms/ui-atoms';
 import { Button } from '@/components/ui/button';
 import {
-    GitBranch,
-    FolderOpen,
     History,
     Settings,
     GitMerge,
     RefreshCw,
     GitCompare,
     MoreHorizontal,
-    Network,
+    Home,
 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import {
@@ -31,6 +29,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Drawer, DrawerTrigger } from '@/components/ui/drawer';
+import { Link } from 'react-router-dom';
 
 export default function Header() {
     const [currentRepository] = useAtom(selectedRepositoryAtom);
@@ -49,7 +48,6 @@ export default function Header() {
         { id: 'status', label: 'Changes', icon: GitCompare },
         { id: 'branches', label: 'Branches', icon: GitMerge },
         { id: 'history', label: 'History', icon: History },
-        { id: 'tree', label: 'Tree', icon: Network },
     ];
 
     const handleViewChange = (view: ActiveView) => {
@@ -133,7 +131,11 @@ export default function Header() {
         <header className="h-14 md:h-12 border-b bg-background flex items-center px-3 md:px-4 gap-2 md:gap-4">
             {/* Logo and app name */}
             <div className="flex items-center gap-2 min-w-0 flex-1">
-                <GitBranch className="h-5 w-5 md:h-4 md:w-4 flex-shrink-0" />
+                <Button variant="ghost" size="sm" asChild className="p-1 h-auto">
+                    <Link to="/">
+                        <Home className="h-5 w-5 md:h-4 md:w-4" />
+                    </Link>
+                </Button>
                 <span className="font-semibold text-sm md:text-base truncate">Gitty</span>
             </div>
 

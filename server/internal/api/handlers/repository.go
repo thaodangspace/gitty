@@ -114,7 +114,7 @@ func (h *RepositoryHandler) CreateRepository(w http.ResponseWriter, r *http.Requ
 	}
 
 	var err error
-	
+
 	if req.URL != "" {
 		_, err = h.gitService.CloneRepository(req.URL, repoPath)
 		if err != nil {
@@ -149,7 +149,7 @@ func (h *RepositoryHandler) CreateRepository(w http.ResponseWriter, r *http.Requ
 
 func (h *RepositoryHandler) GetRepository(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
@@ -167,7 +167,7 @@ func (h *RepositoryHandler) GetRepository(w http.ResponseWriter, r *http.Request
 
 func (h *RepositoryHandler) DeleteRepository(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
@@ -216,7 +216,7 @@ func (h *RepositoryHandler) GetRepositoryStatus(w http.ResponseWriter, r *http.R
 
 func (h *RepositoryHandler) GetCommitHistory(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
@@ -243,7 +243,7 @@ func (h *RepositoryHandler) GetCommitHistory(w http.ResponseWriter, r *http.Requ
 
 func (h *RepositoryHandler) GetBranches(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
@@ -262,7 +262,7 @@ func (h *RepositoryHandler) GetBranches(w http.ResponseWriter, r *http.Request) 
 
 func (h *RepositoryHandler) CreateCommit(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
@@ -292,7 +292,7 @@ func (h *RepositoryHandler) CreateCommit(w http.ResponseWriter, r *http.Request)
 
 func (h *RepositoryHandler) CreateBranch(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
@@ -325,7 +325,7 @@ func (h *RepositoryHandler) CreateBranch(w http.ResponseWriter, r *http.Request)
 func (h *RepositoryHandler) SwitchBranch(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	branchName := chi.URLParam(r, "branch")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
@@ -344,7 +344,7 @@ func (h *RepositoryHandler) SwitchBranch(w http.ResponseWriter, r *http.Request)
 
 func (h *RepositoryHandler) GetFileTree(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
@@ -364,7 +364,7 @@ func (h *RepositoryHandler) GetFileTree(w http.ResponseWriter, r *http.Request) 
 func (h *RepositoryHandler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
@@ -384,7 +384,7 @@ func (h *RepositoryHandler) GetFileContent(w http.ResponseWriter, r *http.Reques
 func (h *RepositoryHandler) SaveFileContent(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
@@ -450,7 +450,7 @@ func (h *RepositoryHandler) ImportRepository(w http.ResponseWriter, r *http.Requ
 		Path string `json:"path"`
 		Name string `json:"name,omitempty"`
 	}
-	
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
@@ -506,7 +506,7 @@ func (h *RepositoryHandler) ImportRepository(w http.ResponseWriter, r *http.Requ
 
 func (h *RepositoryHandler) Pull(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
@@ -526,7 +526,7 @@ func (h *RepositoryHandler) Pull(w http.ResponseWriter, r *http.Request) {
 func (h *RepositoryHandler) StageFile(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
@@ -543,10 +543,29 @@ func (h *RepositoryHandler) StageFile(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"message": "File staged successfully"}`))
 }
 
+func (h *RepositoryHandler) StageAllFiles(w http.ResponseWriter, r *http.Request) {
+	repoID := chi.URLParam(r, "id")
+
+	repo, exists := h.repositories[repoID]
+	if !exists {
+		http.Error(w, "Repository not found", http.StatusNotFound)
+		return
+	}
+
+	err := h.gitService.StageAll(repo.Path)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to stage all files: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"message": "All files staged successfully"}`))
+}
+
 func (h *RepositoryHandler) UnstageFile(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
@@ -566,7 +585,7 @@ func (h *RepositoryHandler) UnstageFile(w http.ResponseWriter, r *http.Request) 
 func (h *RepositoryHandler) GetCommitDetails(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	commitHash := chi.URLParam(r, "hash")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
@@ -594,7 +613,7 @@ func (h *RepositoryHandler) GetCommitDetails(w http.ResponseWriter, r *http.Requ
 func (h *RepositoryHandler) DeleteBranch(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	branchName := chi.URLParam(r, "branch")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
@@ -619,7 +638,7 @@ func (h *RepositoryHandler) DeleteBranch(w http.ResponseWriter, r *http.Request)
 func (h *RepositoryHandler) GetFileDiff(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
-	
+
 	repo, exists := h.repositories[repoID]
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)

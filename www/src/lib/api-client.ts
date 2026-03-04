@@ -155,6 +155,12 @@ class ApiClient {
         });
     }
 
+    async stageAllFiles(id: string): Promise<void> {
+        return this.request<void>(`/repos/${id}/stage-all`, {
+            method: 'POST',
+        });
+    }
+
     async unstageFile(id: string, filePath: string): Promise<void> {
         return this.request<void>(`/repos/${id}/stage/${filePath}`, {
             method: 'DELETE',

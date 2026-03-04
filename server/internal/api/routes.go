@@ -12,7 +12,7 @@ func NewRouter(dataPath string) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173", "http://localhost:3000", "http://100.81.122.10:5173"},
+		AllowedOrigins:   []string{"http://localhost:5173", "http://localhost:3000", "http://100.81.122.10:5173", "http://fedora:5173", "http://100.124.114.89:5173"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
@@ -31,28 +31,29 @@ func NewRouter(dataPath string) *chi.Mux {
 			r.Get("/", repoHandler.ListRepositories)
 			r.Post("/", repoHandler.CreateRepository)
 			r.Post("/import", repoHandler.ImportRepository)
-			
+
 			r.Route("/{id}", func(r chi.Router) {
 				r.Get("/", repoHandler.GetRepository)
 				r.Delete("/", repoHandler.DeleteRepository)
-				
+
 				r.Get("/status", repoHandler.GetRepositoryStatus)
 				r.Get("/commits", repoHandler.GetCommitHistory)
 				r.Get("/commits/{hash}", repoHandler.GetCommitDetails)
 				r.Get("/branches", repoHandler.GetBranches)
-				
+
 				r.Post("/commit", repoHandler.CreateCommit)
 				r.Post("/branches", repoHandler.CreateBranch)
 				r.Put("/branches/{branch}", repoHandler.SwitchBranch)
 				r.Delete("/branches/{branch}", repoHandler.DeleteBranch)
-				
+
 				r.Get("/files", repoHandler.GetFileTree)
 				r.Get("/files/*", repoHandler.GetFileContent)
 				r.Put("/files/*", repoHandler.SaveFileContent)
-				
+
 				r.Get("/diff/*", repoHandler.GetFileDiff)
-				
+
 				r.Post("/stage/*", repoHandler.StageFile)
+				r.Post("/stage-all", repoHandler.StageAllFiles)
 				r.Delete("/stage/*", repoHandler.UnstageFile)
 
 				r.Post("/push", repoHandler.Push)
