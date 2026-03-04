@@ -1,4 +1,5 @@
 import { useAtom } from "jotai";
+import { useState } from "react";
 import { selectedRepositoryAtom } from "@/store/atoms";
 import { useCommitDetails } from "@/store/queries";
 import { format } from "date-fns";
@@ -20,7 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { hljs, getLanguageFromPath } from "@/lib/highlight";
+import DiffViewer from "@/components/file/DiffViewer";
 
 interface CommitDetailsDialogProps {
   commitHash: string | null;
@@ -39,6 +40,10 @@ export default function CommitDetailsDialog({
     isLoading,
     error,
   } = useCommitDetails(currentRepository?.id, commitHash || undefined);
+  const [selectedDiffFile, setSelectedDiffFile] = useState<{
+    path: string;
+    name: string;
+  } | null>(null);
 
   const getChangeTypeColor = (changeType: string) => {
     switch (changeType) {
@@ -66,23 +71,23 @@ export default function CommitDetailsDialog({
     }
   };
 
-  const renderPatch = (patch: string, language?: string) => {
+  const handleViewDiff = (filePath: string) => {
+    const fileName = filePath.split("/").pop() || filePath;
+    setSelectedDiffFile({ path: filePath, name: fileName });
+  };
+
+  const diffTextToHtml = (patch: string) => {
     return patch
       .split("\n")
       .map((line) => {
         const sign = line[0];
         const content = line.slice(1);
-        let highlighted = "";
-        if (language && hljs.getLanguage(language)) {
-          highlighted = hljs.highlight(content, {
-            language,
-            ignoreIllegals: true,
-          }).value;
-        } else {
-          highlighted = hljs.highlightAuto(content).value;
+        if (sign === "+") {
+          return `<span style="color: #22863a; background-color: #f0fff4;">${sign}${content}</span>`;
+        } else if (sign === "-") {
+          return `<span style="color: #a40e26; background-color: #ffeef0;">${sign}${content}</span>`;
         }
-        const lineClass = sign === "+" ? "hljs-addition" : "hljs-deletion";
-        return `<span class="${lineClass}">${sign}${highlighted}</span>`;
+        return `<span>${sign}${content}</span>`;
       })
       .join("\n");
   };
@@ -217,40 +222,69 @@ export default function CommitDetailsDialog({
                         </Badge>
                         <span className="font-mono text-sm">{change.path}</span>
                       </div>
-                      {(change.additions > 0 || change.deletions > 0) && (
-                        <div className="flex items-center gap-2 text-xs">
-                          {change.additions > 0 && (
-                            <span className="text-green-600">
-                              +{change.additions}
-                            </span>
-                          )}
-                          {change.deletions > 0 && (
-                            <span className="text-red-600">
-                              -{change.deletions}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
+{(change.additions > 0 || change.deletions > 0) && (
+                         <div className="flex items-center gap-2 text-xs">
+                           {change.additions > 0 && (
+                             <span className="text-green-600">
+                               +{change.additions}
+                             </span>
+                           )}
+                           {change.deletions > 0 && (
+                             <span className="text-red-600">
+                               -{change.deletions}
+                             </span>
+                           )}
+                           <Button
+                             variant="ghost"
+                             size="sm"
+                             onClick={() => handleViewDiff(change.path)}
+                             className="px-2 text-muted-foreground hover:text-foreground ml-1"
+                             title="View full diff"
+                           >
+                             <FileText className="h-3 w-3" />
+                           </Button>
+                         </div>
+                       )}
+                     </div>
 
-                    {change.patch && (
-                      <div className="p-4">
-                        <pre
-                          className="hljs text-xs bg-muted/50 p-3 rounded border overflow-x-auto whitespace-pre-wrap font-mono"
-                          dangerouslySetInnerHTML={{
-                            __html: renderPatch(
-                              change.patch,
-                              getLanguageFromPath(change.path),
-                            ),
-                          }}
-                        />
-                      </div>
-                    )}
+{change.patch && (
+                       <div className="p-4 text-sm">
+                         <p className="text-muted-foreground mb-2">
+                           Changes:
+                           {change.additions > 0 && (
+                             <span className="text-green-600 ml-2">
+                               +{change.additions}
+                             </span>
+                           )}
+                           {change.deletions > 0 && (
+                             <span className="text-red-600 ml-2">
+                               -{change.deletions}
+                             </span>
+                           )}
+                         </p>
+                         <pre
+                           className="text-xs bg-muted/50 p-2 rounded border overflow-x-auto whitespace-pre-wrap font-mono"
+                           dangerouslySetInnerHTML={{
+                             __html: diffTextToHtml(change.patch),
+                           }}
+                         />
+                       </div>
+                     )}
                   </div>
                 ))}
               </div>
             </div>
           </div>
+        )}
+
+        {/* Diff Viewer */}
+        {selectedDiffFile && currentRepository && (
+          <DiffViewer
+            repositoryId={currentRepository.id}
+            filePath={selectedDiffFile.path}
+            fileName={selectedDiffFile.name}
+            onClose={() => setSelectedDiffFile(null)}
+          />
         )}
       </DialogContent>
     </Dialog>

@@ -1,9 +1,11 @@
 import { useAtom } from 'jotai';
+import { useEffect, useState } from 'react';
 import { selectedRepositoryAtom, selectedFilesAtom } from '@/store/atoms';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
-import { hljs, getLanguageFromPath } from '@/lib/highlight';
+import { getLanguageFromPath } from '@/lib/highlight';
+import { createHighlighter, type BundledLanguage } from 'shiki';
 import { 
     File, 
     Loader2, 
@@ -70,17 +72,31 @@ const isImageFile = (fileName: string): boolean => {
 };
 
 
+let highlighter: Awaited<ReturnType<typeof createHighlighter>> | null = null;
+
 export default function FileViewer() {
     const [currentRepository] = useAtom(selectedRepositoryAtom);
     const [selectedFiles] = useAtom(selectedFilesAtom);
 
     const selectedFile = selectedFiles[0]; // For now, just show the first selected file
 
-    const { data: fileContent, isLoading, error } = useQuery({
+    useEffect(() => {
+        const initHighlighter = async () => {
+            highlighter = await createHighlighter({
+                themes: ['github-light', 'github-dark'],
+                langs: ['javascript', 'typescript', 'python', 'go', 'java', 'json', 'bash', 'xml', 'css', 'markdown', 'c', 'cpp', 'csharp', 'php', 'ruby', 'rust', 'yaml', 'sql'],
+            });
+        };
+        initHighlighter();
+    }, []);
+
+    const { data: fileContent, isLoading: isFetching, error } = useQuery({
         queryKey: ['file-content', currentRepository?.id, selectedFile],
         queryFn: () => apiClient.getFileContent(currentRepository!.id, selectedFile),
         enabled: !!currentRepository?.id && !!selectedFile && isTextFile(selectedFile),
     });
+
+    const [isHighlighting, setIsHighlighting] = useState(false);
 
     if (!currentRepository) {
         return (
@@ -139,7 +155,7 @@ export default function FileViewer() {
     );
 
     const renderTextContent = () => {
-        if (isLoading) {
+        if (isFetching) {
             return (
                 <div className="flex items-center justify-center h-24">
                     <div className="flex items-center gap-2 text-muted-foreground">
@@ -161,17 +177,29 @@ export default function FileViewer() {
             );
         }
 
-        const language = getLanguageFromPath(fileName);
-        const highlighted = fileContent
-            ? language && hljs.getLanguage(language)
-                ? hljs.highlight(fileContent, { language, ignoreIllegals: true }).value
-                : hljs.highlightAuto(fileContent).value
-            : '';
+        if (!fileContent || !highlighter) {
+            return (
+                <div className="flex items-center justify-center h-24">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Initializing syntax highlighter...</span>
+                    </div>
+                </div>
+            );
+        }
+
+        const language = getLanguageFromPath(fileName) as BundledLanguage;
+        const theme = typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'github-dark' : 'github-light';
+
+        const highlighted = highlighter.codeToHtml(fileContent, {
+            lang: language || 'plaintext',
+            theme,
+        });
 
         return (
             <div className="p-3">
-                <pre
-                    className="hljs whitespace-pre-wrap text-sm font-mono bg-muted/30 p-3 rounded overflow-auto"
+                <div
+                    className="whitespace-pre-wrap text-sm font-mono bg-muted/30 p-3 rounded overflow-auto"
                     dangerouslySetInnerHTML={{ __html: highlighted }}
                 />
             </div>

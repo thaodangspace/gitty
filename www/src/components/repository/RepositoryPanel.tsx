@@ -8,12 +8,13 @@ import { useState } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
-import { FolderTree, X, FolderOpen } from 'lucide-react';
+import { FolderTree, X, FolderOpen, Settings } from 'lucide-react';
 import FileTreeBrowser from '../file/FileTreeBrowser';
 import FileViewer from '../file/FileViewer';
 import CommitHistory from './CommitHistory';
 import BranchList from './BranchList';
 import WorkingDirectoryChanges from './WorkingDirectoryChanges';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 
 export default function RepositoryPanel() {
     const [activeView] = useAtom(activeViewAtom);
@@ -103,11 +104,25 @@ export default function RepositoryPanel() {
     const renderStatusView = () => <WorkingDirectoryChanges />;
 
     const renderSettingsView = () => (
-        <div className="p-4">
-            <h2 className="text-lg font-semibold mb-4">Settings</h2>
-            <p className="text-muted-foreground">
-                Application settings will be implemented in Phase 5
-            </p>
+        <div className="p-6 max-w-2xl mx-auto">
+            <div className="flex items-center gap-3 mb-6">
+                <Settings className="h-6 w-6" />
+                <h2 className="text-xl font-semibold">Settings</h2>
+            </div>
+            
+            <div className="space-y-6">
+                <div className="bg-card rounded-lg border p-4">
+                    <h3 className="font-medium mb-2">Appearance</h3>
+                    <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Theme</span>
+                        <ThemeToggle />
+                    </div>
+                </div>
+                
+                <div className="text-sm text-muted-foreground">
+                    <p>Application settings will be implemented in Phase 5</p>
+                </div>
+            </div>
         </div>
     );
 

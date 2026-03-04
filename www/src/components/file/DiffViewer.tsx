@@ -3,6 +3,8 @@ import { X, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { apiClient } from '../../lib/api-client';
 import { PatchDiff } from '@pierre/diffs/react';
+import { useAtom } from 'jotai';
+import { themeAtom } from '@/store/atoms/ui-atoms';
 
 interface DiffViewerProps {
     repositoryId: string;
@@ -15,6 +17,7 @@ export default function DiffViewer({ repositoryId, filePath, fileName, onClose }
     const [diffText, setDiffText] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [theme] = useAtom(themeAtom);
 
     useEffect(() => {
         const fetchDiff = async () => {
@@ -75,6 +78,11 @@ export default function DiffViewer({ repositoryId, filePath, fileName, onClose }
                                         dark: 'github-dark',
                                         light: 'github-light',
                                     },
+                                    themeMode: theme === 'system' 
+                                        ? window.matchMedia('(prefers-color-scheme: dark)').matches 
+                                            ? 'dark' 
+                                            : 'light'
+                                        : theme,
                                 }}
                             />
                         </div>

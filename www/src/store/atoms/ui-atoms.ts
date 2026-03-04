@@ -2,6 +2,7 @@ import { atom } from 'jotai';
 
 export type ActiveView = 'files' | 'history' | 'branches' | 'settings' | 'status';
 export type Theme = 'light' | 'dark' | 'system';
+export const Theme = null as unknown as Theme;
 
 // Layout state
 export const sidebarOpenAtom = atom<boolean>(true);
