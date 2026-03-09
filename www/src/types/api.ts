@@ -118,3 +118,12 @@ export interface DiffStats {
   deletions: number;
   files_changed: number;
 }
+
+export interface GenerateCommitMessageResponse {
+  message: string; // JSON string containing { message: string, detail: string }
+}
+
+export interface ParsedCommitMessage {
+  message: string; // title
+  detail: string; // description
+}

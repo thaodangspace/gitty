@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -831,6 +832,176 @@ func (s *Service) GetFileDiff(repoPath, filePath string) (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported file status: %v", fileStatus.Worktree)
 	}
+}
+
+// GetStagedDiff gets the diff of a staged file (index vs HEAD)
+func (s *Service) GetStagedDiff(repoPath, filePath string) (string, error) {
+	repo, err := s.OpenRepository(repoPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return "", fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	// Get the current status
+	status, err := worktree.Status()
+	if err != nil {
+		return "", fmt.Errorf("failed to get status: %w", err)
+	}
+
+	fileStatus, exists := status[filePath]
+	if !exists {
+		return "", fmt.Errorf("file not found in status: %s", filePath)
+	}
+
+	// Check the staging status
+	if fileStatus.Staging == git.Unmodified {
+		return "", fmt.Errorf("file not staged: %s", filePath)
+	}
+
+	// Get HEAD commit
+	head, err := repo.Head()
+	if err != nil {
+		return "", fmt.Errorf("failed to get HEAD: %w", err)
+	}
+
+	var oldContent string
+	var oldFileExists bool
+
+	if head.Hash().IsZero() {
+		// No HEAD commit yet, empty repo
+		oldContent = ""
+		oldFileExists = false
+	} else {
+		commit, err := repo.CommitObject(head.Hash())
+		if err != nil {
+			return "", fmt.Errorf("failed to get commit: %w", err)
+		}
+
+		// Get the file from HEAD
+		tree, err := commit.Tree()
+		if err != nil {
+			return "", fmt.Errorf("failed to get tree: %w", err)
+		}
+
+		file, err := tree.File(filePath)
+		if err != nil {
+			// File doesn't exist in HEAD (new file)
+			oldContent = ""
+			oldFileExists = false
+		} else {
+			oldContent, err = file.Contents()
+			if err != nil {
+				return "", fmt.Errorf("failed to get file contents: %w", err)
+			}
+			oldFileExists = true
+		}
+	}
+
+	// Get the staged content from the index
+	index, err := repo.Storer.Index()
+	if err != nil {
+		return "", fmt.Errorf("failed to get index: %w", err)
+	}
+
+	entry, err := index.Entry(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get index entry: %w", err)
+	}
+
+	// Read the staged content from the object database
+	obj, err := repo.Storer.EncodedObject(plumbing.BlobObject, entry.Hash)
+	if err != nil {
+		return "", fmt.Errorf("failed to get staged object: %w", err)
+	}
+
+	reader, err := obj.Reader()
+	if err != nil {
+		return "", fmt.Errorf("failed to get object reader: %w", err)
+	}
+	defer reader.Close()
+
+	stagedContent, err := io.ReadAll(reader)
+	if err != nil {
+		return "", fmt.Errorf("failed to read staged content: %w", err)
+	}
+
+	// Generate diff
+	if fileStatus.Staging == git.Deleted {
+		// File was staged for deletion
+		return s.generateTextDiff(filePath, oldContent, ""), nil
+	}
+
+	// For new or modified files
+	return s.generateStagedDiff(filePath, oldContent, oldFileExists, string(stagedContent)), nil
+}
+
+// generateStagedDiff creates a unified diff for staged changes
+func (s *Service) generateStagedDiff(filePath, oldContent string, oldFileExists bool, newContent string) string {
+	var diff strings.Builder
+
+	diff.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", filePath, filePath))
+
+	if !oldFileExists {
+		// New file
+		diff.WriteString("new file mode 100644\n")
+		diff.WriteString("index 0000000..0000000\n")
+		diff.WriteString("--- /dev/null\n")
+		diff.WriteString(fmt.Sprintf("+++ b/%s\n", filePath))
+	} else {
+		// Modified file
+		diff.WriteString("index 0000000..0000000 100644\n")
+		diff.WriteString(fmt.Sprintf("--- a/%s\n", filePath))
+		diff.WriteString(fmt.Sprintf("+++ b/%s\n", filePath))
+	}
+
+	oldLines := strings.Split(oldContent, "\n")
+	newLines := strings.Split(newContent, "\n")
+
+	// Simple line-by-line diff (this could be improved with a proper diff algorithm)
+	maxLines := max(len(oldLines), len(newLines))
+
+	if maxLines > 0 {
+		startOld := 1
+		startNew := 1
+		if !oldFileExists {
+			startOld = 0
+		}
+		diff.WriteString(fmt.Sprintf("@@ -%d,%d +%d,%d @@\n", startOld, len(oldLines), startNew, len(newLines)))
+
+		for i := 0; i < maxLines; i++ {
+			var oldLine, newLine string
+
+			if i < len(oldLines) {
+				oldLine = oldLines[i]
+			}
+			if i < len(newLines) {
+				newLine = newLines[i]
+			}
+
+			if i < len(oldLines) && i < len(newLines) {
+				if oldLine != newLine {
+					// Changed line
+					diff.WriteString("-" + oldLine + "\n")
+					diff.WriteString("+" + newLine + "\n")
+				} else {
+					// Unchanged line (context)
+					diff.WriteString(" " + oldLine + "\n")
+				}
+			} else if i < len(oldLines) {
+				// Deleted line
+				diff.WriteString("-" + oldLine + "\n")
+			} else if i < len(newLines) {
+				// Added line
+				diff.WriteString("+" + newLine + "\n")
+			}
+		}
+	}
+
+	return diff.String()
 }
 
 // generateTextDiff creates a unified diff between two text contents

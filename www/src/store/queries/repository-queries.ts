@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient, QueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
-import { useRef } from 'react';
 
 export const useRepositories = () => {
     return useQuery({
@@ -36,23 +35,14 @@ export const triggerRepositoryStatus = async (
 };
 
 export const useRepositoryStatus = (id: string | undefined) => {
-    const initialFetchCompleted = useRef(false);
-
     return useQuery({
         queryKey: repositoryStatusKey(id),
-        queryFn: async () => {
-            // On first fetch, get status immediately (wait=false)
-            // On subsequent refetches, use long polling (wait=true)
-            const shouldWait = initialFetchCompleted.current;
-            const result = await apiClient.getRepositoryStatus(id!, shouldWait);
-            initialFetchCompleted.current = true;
-            return result;
-        },
+        queryFn: () => apiClient.getRepositoryStatus(id!),
         enabled: !!id,
-        refetchInterval: 1, // Long polling: refetch immediately after response (server waits up to 30s)
-        refetchIntervalInBackground: true, // Keep polling even when tab is not focused
-        retry: true, // Retry on errors (immediate reconnect)
-        retryDelay: 0, // No delay between retries (immediate reconnect)
+        refetchInterval: 5000, // Poll every 5 seconds
+        refetchIntervalInBackground: false,
+        retry: true,
+        retryDelay: 1000,
     });
 };
 
@@ -189,5 +179,12 @@ export const usePush = () => {
             queryClient.invalidateQueries({ queryKey: ['commit-history', variables.repositoryId] });
             await triggerRepositoryStatus(queryClient, variables.repositoryId);
         },
+    });
+};
+
+export const useGenerateCommitMessage = () => {
+    return useMutation({
+        mutationFn: ({ repositoryId }: { repositoryId: string }) =>
+            apiClient.generateCommitMessage(repositoryId),
     });
 };

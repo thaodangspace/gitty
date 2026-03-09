@@ -140,3 +140,7 @@ type DiffStats struct {
 	Deletions    int `json:"deletions"`
 	FilesChanged int `json:"files_changed"`
 }
+
+type GenerateCommitMessageResponse struct {
+	Message string `json:"message"`
+}

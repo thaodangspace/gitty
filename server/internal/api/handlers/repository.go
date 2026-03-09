@@ -10,32 +10,45 @@ import (
 	"strconv"
 	"time"
 
+	"gitweb/server/internal/config"
 	"gitweb/server/internal/git"
 	"gitweb/server/internal/models"
+	"gitweb/server/internal/services"
 
 	"github.com/go-chi/chi/v5"
 )
 
 type RepositoryHandler struct {
-	gitService   *git.Service
-	repositories map[string]*models.Repository
-	dataPath     string
-	watcher      *git.RepositoryWatcher
+	gitService    *git.Service
+	repositories  map[string]*models.Repository
+	dataPath      string
+	watcher       *git.RepositoryWatcher
+	config        *config.Config
+	claudeService *services.ClaudeService
 }
 
-func NewRepositoryHandler(dataPath string) *RepositoryHandler {
+func NewRepositoryHandler(dataPath string, cfg *config.Config) *RepositoryHandler {
 	watcher, err := git.NewRepositoryWatcher()
 	if err != nil {
 		// Log error but don't fail initialization - we can still function without watching
 		fmt.Printf("Warning: Failed to initialize repository watcher: %v\n", err)
 	}
 
-	return &RepositoryHandler{
-		gitService:   git.NewService(),
-		repositories: make(map[string]*models.Repository),
-		dataPath:     dataPath,
-		watcher:      watcher,
+	handler := &RepositoryHandler{
+		gitService:    git.NewService(),
+		repositories:  make(map[string]*models.Repository),
+		dataPath:      dataPath,
+		watcher:       watcher,
+		config:        cfg,
+		claudeService: services.NewClaudeService(cfg.ClaudePromptValue()),
 	}
+
+	// Load repositories at initialization so they're available for all handlers
+	if err := handler.loadRepositories(); err != nil {
+		fmt.Printf("Warning: Failed to load repositories during initialization: %v\n", err)
+	}
+
+	return handler
 }
 
 func (h *RepositoryHandler) loadRepositories() error {
@@ -658,4 +671,56 @@ func (h *RepositoryHandler) GetFileDiff(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.Write([]byte(diff))
+}
+
+func (h *RepositoryHandler) GenerateCommitMessage(w http.ResponseWriter, r *http.Request) {
+	repoID := chi.URLParam(r, "id")
+
+	repo, exists := h.repositories[repoID]
+	if !exists {
+		// Try to load the repository directly from the data path
+		repoPath := filepath.Join(h.dataPath, repoID)
+		if !h.isGitRepository(repoPath) {
+			http.Error(w, "Repository not found", http.StatusNotFound)
+			return
+		}
+		// Create a temporary repository object for this request
+		repo = &models.Repository{
+			ID:        repoID,
+			Name:      repoID,
+			Path:      repoPath,
+			IsLocal:   true,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+	}
+
+	// Get repository status to find staged files
+	status, err := h.gitService.GetRepositoryStatus(repo.Path)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get repository status: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if len(status.Staged) == 0 {
+		http.Error(w, "No staged files to generate commit message for", http.StatusBadRequest)
+		return
+	}
+
+	// Generate commit message using Claude CLI
+	customPrompt := ""
+	if h.config != nil && h.config.ClaudePrompt != nil {
+		customPrompt = *h.config.ClaudePrompt
+	}
+
+	message, err := h.claudeService.GenerateCommitMessage(nil, customPrompt)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to generate commit message: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(models.GenerateCommitMessageResponse{
+		Message: message,
+	})
 }

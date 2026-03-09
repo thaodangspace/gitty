@@ -12,6 +12,7 @@ import (
 
 	"gitweb/server/internal/api"
 	"gitweb/server/internal/auth"
+	"gitweb/server/internal/config"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -29,7 +30,18 @@ func main() {
 
 	masterPassword := os.Getenv("GITTY_MASTER_PASSWORD")
 
-	apiRouter := api.NewRouter(dataPath)
+	cfg, err := config.Load()
+	if err != nil {
+		log.Printf("Warning: Failed to load config: %v", err)
+		cfg = &config.Config{}
+	}
+
+	// Set master password from environment variable if provided (takes precedence over config)
+	if masterPassword != "" {
+		cfg.MasterPassword = &masterPassword
+	}
+
+	apiRouter := api.NewRouter(dataPath, cfg)
 
 	r := chi.NewRouter()
 

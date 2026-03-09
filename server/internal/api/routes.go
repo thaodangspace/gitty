@@ -3,16 +3,17 @@ package api
 import (
 	"gitweb/server/internal/api/handlers"
 	"gitweb/server/internal/api/middleware"
+	"gitweb/server/internal/config"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 )
 
-func NewRouter(dataPath string) *chi.Mux {
+func NewRouter(dataPath string, cfg *config.Config) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173", "http://localhost:5174", "http://100.81.122.10:5173", "http://fedora:5173", "http://100.124.114.89:5173"},
+		AllowedOrigins:   []string{"http://localhost:5176", "http://100.117.191.67:5176"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
@@ -23,7 +24,7 @@ func NewRouter(dataPath string) *chi.Mux {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	repoHandler := handlers.NewRepositoryHandler(dataPath)
+	repoHandler := handlers.NewRepositoryHandler(dataPath, cfg)
 	fsHandler := handlers.NewFilesystemHandler(true) // Restrict to user home directory
 
 	r.Route("/api", func(r chi.Router) {
@@ -42,6 +43,7 @@ func NewRouter(dataPath string) *chi.Mux {
 				r.Get("/branches", repoHandler.GetBranches)
 
 				r.Post("/commit", repoHandler.CreateCommit)
+				r.Post("/generate-commit-message", repoHandler.GenerateCommitMessage)
 				r.Post("/branches", repoHandler.CreateBranch)
 				r.Put("/branches/{branch}", repoHandler.SwitchBranch)
 				r.Delete("/branches/{branch}", repoHandler.DeleteBranch)

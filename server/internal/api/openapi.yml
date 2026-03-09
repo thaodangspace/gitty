@@ -1,0 +1,827 @@
+openapi: 3.0.3
+info:
+  title: Gitty API
+  description: API for managing Git repositories
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /api/repos:
+    get:
+      summary: List all repositories
+      operationId: listRepositories
+      tags:
+        - Repositories
+      responses:
+        '200':
+          description: List of repositories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Repository'
+    post:
+      summary: Create a new repository
+      operationId: createRepository
+      tags:
+        - Repositories
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRepositoryRequest'
+      responses:
+        '201':
+          description: Repository created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Repository'
+        '400':
+          description: Invalid request
+        '409':
+          description: Repository already exists
+
+  /api/repos/import:
+    post:
+      summary: Import an existing Git repository
+      operationId: importRepository
+      tags:
+        - Repositories
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - path
+              properties:
+                path:
+                  type: string
+                  description: Path to the existing Git repository
+                name:
+                  type: string
+                  description: Optional name for the repository
+      responses:
+        '201':
+          description: Repository imported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Repository'
+        '400':
+          description: Invalid request or not a valid Git repository
+
+  /api/repos/{id}:
+    get:
+      summary: Get a repository by ID
+      operationId: getRepository
+      tags:
+        - Repositories
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Repository details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Repository'
+        '404':
+          description: Repository not found
+
+    delete:
+      summary: Delete a repository
+      operationId: deleteRepository
+      tags:
+        - Repositories
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Repository deleted
+        '404':
+          description: Repository not found
+
+  /api/repos/{id}/status:
+    get:
+      summary: Get repository status
+      operationId: getRepositoryStatus
+      tags:
+        - Repositories
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: wait
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Enable long polling (wait for changes)
+      responses:
+        '200':
+          description: Repository status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryStatus'
+        '404':
+          description: Repository not found
+
+  /api/repos/{id}/commits:
+    get:
+      summary: Get commit history
+      operationId: getCommitHistory
+      tags:
+        - Commits
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: List of commits
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Commit'
+        '404':
+          description: Repository not found
+
+  /api/repos/{id}/commits/{hash}:
+    get:
+      summary: Get commit details
+      operationId: getCommitDetails
+      tags:
+        - Commits
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Commit details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommitDetail'
+        '400':
+          description: Commit hash is required
+        '404':
+          description: Repository not found
+
+  /api/repos/{id}/branches:
+    get:
+      summary: Get all branches
+      operationId: getBranches
+      tags:
+        - Branches
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of branches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Branch'
+        '404':
+          description: Repository not found
+
+    post:
+      summary: Create a new branch
+      operationId: createBranch
+      tags:
+        - Branches
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  description: Name of the branch to create
+      responses:
+        '201':
+          description: Branch created
+        '400':
+          description: Branch name is required
+        '404':
+          description: Repository not found
+
+  /api/repos/{id}/branches/{branch}:
+    put:
+      summary: Switch to a branch
+      operationId: switchBranch
+      tags:
+        - Branches
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: branch
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Branch switched
+        '404':
+          description: Repository not found
+
+    delete:
+      summary: Delete a branch
+      operationId: deleteBranch
+      tags:
+        - Branches
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: branch
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Branch deleted
+        '400':
+          description: Branch name is required
+        '404':
+          description: Repository not found
+
+  /api/repos/{id}/commit:
+    post:
+      summary: Create a commit
+      operationId: createCommit
+      tags:
+        - Commits
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommitRequest'
+      responses:
+        '201':
+          description: Commit created
+        '400':
+          description: Commit message is required
+        '404':
+          description: Repository not found
+
+  /api/repos/{id}/files:
+    get:
+      summary: Get file tree
+      operationId: getFileTree
+      tags:
+        - Files
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File tree
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FileInfo'
+        '404':
+          description: Repository not found
+
+  /api/repos/{id}/files/{path}:
+    get:
+      summary: Get file content
+      operationId: getFileContent
+      tags:
+        - Files
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File content
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Repository not found
+    put:
+      summary: Save file content
+      operationId: saveFileContent
+      tags:
+        - Files
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+      responses:
+        '200':
+          description: File saved
+        '404':
+          description: Repository not found
+
+  /api/repos/{id}/diff/{path}:
+    get:
+      summary: Get file diff
+      operationId: getFileDiff
+      tags:
+        - Files
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File diff
+          content:
+            text/plain:
+              schema:
+                type: string
+        '400':
+          description: File path is required
+        '404':
+          description: Repository not found
+
+  /api/repos/{id}/stage/{path}:
+    post:
+      summary: Stage a file
+      operationId: stageFile
+      tags:
+        - Staging
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File staged
+        '404':
+          description: Repository not found
+
+    delete:
+      summary: Unstage a file
+      operationId: unstageFile
+      tags:
+        - Staging
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File unstaged
+        '404':
+          description: Repository not found
+
+  /api/repos/{id}/stage-all:
+    post:
+      summary: Stage all files
+      operationId: stageAllFiles
+      tags:
+        - Staging
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: All files staged
+        '404':
+          description: Repository not found
+
+  /api/repos/{id}/push:
+    post:
+      summary: Push to remote
+      operationId: push
+      tags:
+        - Remote
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Push completed
+        '404':
+          description: Repository not found
+
+  /api/repos/{id}/push/force:
+    post:
+      summary: Force push to remote
+      operationId: forcePush
+      tags:
+        - Remote
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Force push completed
+        '404':
+          description: Repository not found
+
+  /api/repos/{id}/pull:
+    post:
+      summary: Pull from remote
+      operationId: pull
+      tags:
+        - Remote
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pull completed
+        '404':
+          description: Repository not found
+
+  /api/filesystem/browse:
+    get:
+      summary: Browse directory
+      operationId: browseDirectory
+      tags:
+        - Filesystem
+      parameters:
+        - name: path
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Directory path to browse
+      responses:
+        '200':
+          description: Directory listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectoryListing'
+        '400':
+          description: Invalid path
+
+  /api/filesystem/roots:
+    get:
+      summary: Get volume roots
+      operationId: getVolumeRoots
+      tags:
+        - Filesystem
+      responses:
+        '200':
+          description: List of volume roots
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  roots:
+                    type: array
+                    items:
+                      type: string
+
+components:
+  schemas:
+    Repository:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        path:
+          type: string
+        url:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        is_local:
+          type: boolean
+        current_branch:
+          type: string
+
+    CreateRepositoryRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+        description:
+          type: string
+        is_local:
+          type: boolean
+
+    RepositoryStatus:
+      type: object
+      properties:
+        repository_id:
+          type: string
+        branch:
+          type: string
+        is_clean:
+          type: boolean
+        ahead:
+          type: integer
+        behind:
+          type: integer
+        staged:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileChange'
+        modified:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileChange'
+        untracked:
+          type: array
+          items:
+            type: string
+        conflicts:
+          type: array
+          items:
+            type: string
+
+    FileChange:
+      type: object
+      properties:
+        path:
+          type: string
+        status:
+          type: string
+        type:
+          type: string
+
+    Branch:
+      type: object
+      properties:
+        name:
+          type: string
+        is_current:
+          type: boolean
+        is_remote:
+          type: boolean
+        upstream:
+          type: string
+        last_commit:
+          $ref: '#/components/schemas/Commit'
+
+    Commit:
+      type: object
+      properties:
+        hash:
+          type: string
+        message:
+          type: string
+        author:
+          $ref: '#/components/schemas/Author'
+        date:
+          type: string
+          format: date-time
+        parent_hash:
+          type: string
+
+    Author:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+
+    CommitRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+        files:
+          type: array
+          items:
+            type: string
+        author:
+          $ref: '#/components/schemas/Author'
+
+    CommitDetail:
+      type: object
+      properties:
+        hash:
+          type: string
+        message:
+          type: string
+        author:
+          $ref: '#/components/schemas/Author'
+        date:
+          type: string
+          format: date-time
+        parent_hash:
+          type: string
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileDiff'
+        stats:
+          $ref: '#/components/schemas/DiffStats'
+
+    FileDiff:
+      type: object
+      properties:
+        path:
+          type: string
+        change_type:
+          type: string
+        additions:
+          type: integer
+        deletions:
+          type: integer
+        patch:
+          type: string
+
+    DiffStats:
+      type: object
+      properties:
+        additions:
+          type: integer
+        deletions:
+          type: integer
+        files_changed:
+          type: integer
+
+    FileInfo:
+      type: object
+      properties:
+        path:
+          type: string
+        name:
+          type: string
+        is_directory:
+          type: boolean
+        size:
+          type: integer
+          format: int64
+        mod_time:
+          type: string
+          format: date-time
+        mode:
+          type: string
+
+    DirectoryEntry:
+      type: object
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        is_directory:
+          type: boolean
+        is_hidden:
+          type: boolean
+        size:
+          type: integer
+          format: int64
+        mod_time:
+          type: string
+        permissions:
+          type: string
+        is_git_repo:
+          type: boolean
+
+    DirectoryListing:
+      type: object
+      properties:
+        current_path:
+          type: string
+        parent_path:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/DirectoryEntry'
+        can_go_up:
+          type: boolean

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gitweb/server/internal/api"
+	"gitweb/server/internal/config"
 )
 
 func main() {
@@ -28,8 +29,14 @@ func main() {
 
 	log.Printf("Using data directory: %s", dataPath)
 
+	cfg, err := config.Load()
+	if err != nil {
+		log.Printf("Warning: Failed to load config: %v", err)
+		cfg = &config.Config{}
+	}
+
 	// Create router with all API routes
-	r := api.NewRouter(dataPath)
+	r := api.NewRouter(dataPath, cfg)
 
 	// Health check endpoint
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {

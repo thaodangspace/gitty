@@ -9,6 +9,7 @@ import type {
     CommitRequest,
     DirectoryListing,
     DirectoryEntry,
+    GenerateCommitMessageResponse,
 } from '../types/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
@@ -214,6 +215,12 @@ class ApiClient {
 
     async getVolumeRoots(): Promise<{ roots: DirectoryEntry[] }> {
         return this.request<{ roots: DirectoryEntry[] }>('/filesystem/roots');
+    }
+
+    async generateCommitMessage(id: string): Promise<GenerateCommitMessageResponse> {
+        return this.request<GenerateCommitMessageResponse>(`/repos/${id}/generate-commit-message`, {
+            method: 'POST',
+        });
     }
 }
 

@@ -36,6 +36,16 @@ export default function DiffViewer({ repositoryId, filePath, fileName, onClose }
         fetchDiff();
     }, [repositoryId, filePath]);
 
+    // Calculate the actual theme mode for PatchDiff
+    const getThemeMode = (): 'dark' | 'light' => {
+        if (theme === 'system') {
+            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        return theme;
+    };
+
+    const themeMode = getThemeMode();
+
     return (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
             <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] flex flex-col dark:bg-gray-900">
@@ -69,7 +79,7 @@ export default function DiffViewer({ repositoryId, filePath, fileName, onClose }
                             <p className="text-muted-foreground dark:text-gray-400">No changes to display</p>
                         </div>
                     ) : (
-                        <div className="diff-view-container p-4">
+                        <div className="diff-view-container p-4" key={themeMode}>
                             <PatchDiff
                                 patch={diffText}
                                 options={{
@@ -78,11 +88,7 @@ export default function DiffViewer({ repositoryId, filePath, fileName, onClose }
                                         dark: 'github-dark',
                                         light: 'github-light',
                                     },
-                                    themeMode: theme === 'system' 
-                                        ? window.matchMedia('(prefers-color-scheme: dark)').matches 
-                                            ? 'dark' 
-                                            : 'light'
-                                        : theme,
+                                    themeMode: themeMode,
                                 }}
                             />
                         </div>

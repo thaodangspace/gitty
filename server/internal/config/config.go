@@ -15,6 +15,9 @@ type Config struct {
 	// MasterPassword, when provided, enables password protection for the
 	// server. A nil value indicates password protection is disabled.
 	MasterPassword *string `json:"masterPassword,omitempty"`
+	// ClaudePrompt, when provided, customizes the prompt used by the Claude CLI
+	// to generate commit messages. If nil, a default prompt is used.
+	ClaudePrompt *string `json:"claudePrompt,omitempty"`
 }
 
 // Load reads the configuration from ~/.config/gitty.config.json. If the file
@@ -57,6 +60,10 @@ func (c *Config) Validate() error {
 		*c.MasterPassword = trimmed
 	}
 
+	if c.ClaudePrompt != nil {
+		*c.ClaudePrompt = strings.TrimSpace(*c.ClaudePrompt)
+	}
+
 	return nil
 }
 
@@ -73,6 +80,35 @@ func (c Config) MasterPasswordValue() (string, bool) {
 		return "", false
 	}
 	return *c.MasterPassword, true
+}
+
+// ClaudePromptValue returns the configured Claude prompt, or a default prompt
+// if none is configured.
+func (c Config) ClaudePromptValue() string {
+	if c.ClaudePrompt != nil && strings.TrimSpace(*c.ClaudePrompt) != "" {
+		return *c.ClaudePrompt
+	}
+	// Default prompt
+	return `You are a helpful assistant that writes Git commit messages.
+
+Given the following file diffs from staged changes, write a meaningful commit message following the conventional commit format.
+
+Format your response as:
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+
+Where type is one of: feat, fix, docs, style, refactor, test, chore, perf, ci, build, revert
+
+Keep the subject under 72 characters and imperative mood (e.g., "add feature" not "added feature").
+
+Here are the diffs:
+
+{{diffs}}
+
+Provide only the commit message, no other text.`
 }
 
 func configFilePath() (string, error) {

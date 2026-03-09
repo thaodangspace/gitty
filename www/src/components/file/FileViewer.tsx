@@ -1,16 +1,17 @@
 import { useAtom } from 'jotai';
 import { useEffect, useState } from 'react';
 import { selectedRepositoryAtom, selectedFilesAtom } from '@/store/atoms';
+import { themeAtom } from '@/store/atoms/ui-atoms';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { getLanguageFromPath } from '@/lib/highlight';
 import { createHighlighter, type BundledLanguage } from 'shiki';
-import { 
-    File, 
-    Loader2, 
-    AlertCircle, 
-    Download, 
+import {
+    File,
+    Loader2,
+    AlertCircle,
+    Download,
     Edit3,
     Eye,
     FileText,
@@ -77,6 +78,7 @@ let highlighter: Awaited<ReturnType<typeof createHighlighter>> | null = null;
 export default function FileViewer() {
     const [currentRepository] = useAtom(selectedRepositoryAtom);
     const [selectedFiles] = useAtom(selectedFilesAtom);
+    const [theme] = useAtom(themeAtom);
 
     const selectedFile = selectedFiles[0]; // For now, just show the first selected file
 
@@ -189,11 +191,14 @@ export default function FileViewer() {
         }
 
         const language = getLanguageFromPath(fileName) as BundledLanguage;
-        const theme = typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'github-dark' : 'github-light';
+        const isDarkTheme = theme === 'system'
+            ? typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+            : theme === 'dark';
+        const syntaxTheme = isDarkTheme ? 'github-dark' : 'github-light';
 
         const highlighted = highlighter.codeToHtml(fileContent, {
             lang: language || 'plaintext',
-            theme,
+            theme: syntaxTheme,
         });
 
         return (
