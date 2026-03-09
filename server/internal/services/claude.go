@@ -3,28 +3,33 @@ package services
 import (
 	"bytes"
 	"fmt"
+	"gitweb/server/internal/config"
 	"os/exec"
 	"strings"
 	"time"
 )
 
 type ClaudeService struct {
-	timeout       time.Duration
-	defaultPrompt string
+	timeout time.Duration
+	config  *config.Config
 }
 
-func NewClaudeService(defaultPrompt string) *ClaudeService {
+func NewClaudeService(cfg *config.Config) *ClaudeService {
 	return &ClaudeService{
-		timeout:       60 * time.Second,
-		defaultPrompt: defaultPrompt,
+		timeout: 60 * time.Second,
+		config:  cfg,
 	}
 }
 
 func (s *ClaudeService) GenerateCommitMessage(diffs []string, customPrompt string) (string, error) {
-	prompt := "generate commit message from changed files, only response commit message with jsonstringfy format (makesure Javascript can parse): {\"message\": \"<commit message>\", \"detail\": \"<detail>\"}"
+	prompt := s.config.ClaudePromptValue()
 	if customPrompt != "" {
 		prompt = customPrompt
 	}
+
+	// Replace {{diffs}} placeholder with actual diffs
+	diffsStr := strings.Join(diffs, "\n")
+	prompt = strings.Replace(prompt, "{{diffs}}", diffsStr, 1)
 
 	// Create claude command
 	cmd := exec.Command("claude", prompt)
