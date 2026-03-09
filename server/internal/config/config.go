@@ -108,7 +108,7 @@ Here are the diffs:
 
 {{diffs}}
 
-Provide only the commit message, no other text.`
+	Provide only the commit message, no other text. response with jsonstringfy format {message: <message>, detail: <detail>}`
 }
 
 func configFilePath() (string, error) {

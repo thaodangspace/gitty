@@ -40,7 +40,7 @@ func NewRepositoryHandler(dataPath string, cfg *config.Config) *RepositoryHandle
 		dataPath:      dataPath,
 		watcher:       watcher,
 		config:        cfg,
-		claudeService: services.NewClaudeService(cfg.ClaudePromptValue()),
+		claudeService: services.NewClaudeService(cfg),
 	}
 
 	// Load repositories at initialization so they're available for all handlers
@@ -53,7 +53,7 @@ func NewRepositoryHandler(dataPath string, cfg *config.Config) *RepositoryHandle
 
 func (h *RepositoryHandler) loadRepositories() error {
 	if _, err := os.Stat(h.dataPath); os.IsNotExist(err) {
-		return os.MkdirAll(h.dataPath, 0755)
+		return os.MkdirAll(h.dataPath, 0o755)
 	}
 
 	entries, err := os.ReadDir(h.dataPath)
