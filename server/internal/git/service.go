@@ -1067,3 +1067,20 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+func (s *Service) GetGitConfig(repoPath string) (*models.GitConfig, error) {
+	repo, err := s.OpenRepository(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	config, err := repo.Config()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository config: %w", err)
+	}
+
+	return &models.GitConfig{
+		Name:  config.User.Name,
+		Email: config.User.Email,
+	}, nil
+}

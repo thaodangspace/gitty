@@ -144,3 +144,56 @@ type DiffStats struct {
 type GenerateCommitMessageResponse struct {
 	Message string `json:"message"`
 }
+
+type GitConfig struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+// ─── TOKENIZED DIFF MODELS ───
+// Used for syntax-highlighted diffs sent to the mobile client
+
+// Token - a syntax-highlighted text fragment
+type Token struct {
+	Text  string `json:"text"`
+	Color string `json:"color"`
+}
+
+// DiffLineTokenized - single line in a diff hunk
+type DiffLineTokenized struct {
+	Type   string  `json:"type"`   // "added" | "deleted" | "context"
+	Tokens []Token `json:"tokens"` // syntax-highlighted fragments
+	OldNum int     `json:"oldNum,omitempty"`
+	NewNum int     `json:"newNum,omitempty"`
+}
+
+// DiffHunkTokenized - contiguous section of changed lines
+type DiffHunkTokenized struct {
+	Header string            `json:"header"` // "@@ -14,8 +14,10 @@"
+	Lines  []DiffLineTokenized `json:"lines"`
+}
+
+// TokenizedDiff - complete tokenized diff for a single file
+type TokenizedDiff struct {
+	Filename  string            `json:"filename"`
+	Hunks     []DiffHunkTokenized `json:"hunks"`
+	Additions int               `json:"additions"`
+	Deletions int               `json:"deletions"`
+}
+
+// TokenizedFileDiff - wraps tokenized diff with file metadata
+type TokenizedFileDiff struct {
+	Path       string        `json:"path"`
+	ChangeType string        `json:"changeType"` // "added" | "modified" | "deleted"
+	Diff       TokenizedDiff `json:"diff"`
+}
+
+// TokenizedCommitDiff - full tokenized diff for a commit
+type TokenizedCommitDiff struct {
+	Hash    string              `json:"hash"`
+	Message string              `json:"message"`
+	Author  Author              `json:"author"`
+	Date    time.Time           `json:"date"`
+	Files   []TokenizedFileDiff `json:"files"`
+	Stats   DiffStats           `json:"stats"`
+}

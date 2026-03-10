@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAtom } from 'jotai';
 import { selectedRepositoryAtom } from '@/store/atoms';
 import { useRepositoryStatus, triggerRepositoryStatus, useGenerateCommitMessage } from '@/store/queries';
@@ -20,6 +20,8 @@ import { GitCommit, Loader2, CheckCircle2, Sparkles } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import type { FileChange } from '@/types/api';
+import { useGitConfig } from '@/store/queries/repository-queries';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface CommitDialogProps {
     open: boolean;
@@ -29,15 +31,25 @@ interface CommitDialogProps {
 export default function CommitDialog({ open, onOpenChange }: CommitDialogProps) {
     const [currentRepository] = useAtom(selectedRepositoryAtom);
     const { data: repoStatus } = useRepositoryStatus(currentRepository?.id);
+    const { data: gitConfig } = useGitConfig(currentRepository?.id);
     const [commitTitle, setCommitTitle] = useState('');
     const [commitDetail, setCommitDetail] = useState('');
     const [authorName, setAuthorName] = useState('');
     const [authorEmail, setAuthorEmail] = useState('');
+    const [showCustomAuthor, setShowCustomAuthor] = useState(false);
     const isMobile = useIsMobile();
 
     const queryClient = useQueryClient();
 
     const generateCommitMessageMutation = useGenerateCommitMessage();
+
+    // Pre-fill author fields when dialog opens and git config is available
+    useEffect(() => {
+        if (gitConfig && open && !showCustomAuthor) {
+            setAuthorName(gitConfig.name || '');
+            setAuthorEmail(gitConfig.email || '');
+        }
+    }, [gitConfig, open, showCustomAuthor]);
 
     // Normalize repo status arrays to explicit types with stable identity
     const staged = useMemo(() => (repoStatus?.staged ?? []) as FileChange[], [repoStatus]);
@@ -65,6 +77,7 @@ export default function CommitDialog({ open, onOpenChange }: CommitDialogProps) 
             setCommitDetail('');
             setAuthorName('');
             setAuthorEmail('');
+            setShowCustomAuthor(false);
             onOpenChange(false);
         },
     });
@@ -77,10 +90,10 @@ export default function CommitDialog({ open, onOpenChange }: CommitDialogProps) 
         }
 
         const stagedFiles = staged.map((file) => file.path);
-        const author =
-            authorName.trim() && authorEmail.trim()
-                ? { name: authorName.trim(), email: authorEmail.trim() }
-                : undefined;
+        // Only send author if custom author is enabled and fields are filled
+        const author = showCustomAuthor && authorName.trim() && authorEmail.trim()
+            ? { name: authorName.trim(), email: authorEmail.trim() }
+            : undefined;
 
         // Combine title and detail into a single commit message
         const fullMessage = commitDetail.trim()
@@ -102,6 +115,7 @@ export default function CommitDialog({ open, onOpenChange }: CommitDialogProps) 
                 setCommitDetail('');
                 setAuthorName('');
                 setAuthorEmail('');
+                setShowCustomAuthor(false);
             }
         }
     };
@@ -201,34 +215,62 @@ export default function CommitDialog({ open, onOpenChange }: CommitDialogProps) 
                             />
                         </div>
 
-                        <div className={isMobile ? 'grid gap-4' : 'grid grid-cols-2 gap-4'}>
-                            <div className="grid gap-2">
-                                <label htmlFor="authorName" className="text-sm font-medium">
-                                    Author name
-                                </label>
-                                <Input
-                                    id="authorName"
-                                    value={authorName}
-                                    onChange={(e) => setAuthorName(e.target.value)}
-                                    placeholder="Your name"
-                                    disabled={createCommitMutation.isPending}
-                                />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <label htmlFor="authorEmail" className="text-sm font-medium">
-                                    Author email
-                                </label>
-                                <Input
-                                    id="authorEmail"
-                                    type="email"
-                                    value={authorEmail}
-                                    onChange={(e) => setAuthorEmail(e.target.value)}
-                                    placeholder="your@email.com"
-                                    disabled={createCommitMutation.isPending}
-                                />
-                            </div>
+                        <div className="flex items-center space-x-2 py-2">
+                            <Checkbox
+                                id="useCustomAuthor"
+                                checked={showCustomAuthor}
+                                onCheckedChange={(checked) => {
+                                    setShowCustomAuthor(checked as boolean);
+                                    if (!checked) {
+                                        // Reset to git config values when unchecking
+                                        setAuthorName(gitConfig?.name || '');
+                                        setAuthorEmail(gitConfig?.email || '');
+                                    } else {
+                                        // Clear fields when checking to allow custom input
+                                        setAuthorName('');
+                                        setAuthorEmail('');
+                                    }
+                                }}
+                                disabled={createCommitMutation.isPending}
+                            />
+                            <label
+                                htmlFor="useCustomAuthor"
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                            >
+                                Use different author
+                            </label>
                         </div>
+
+                        {showCustomAuthor && (
+                            <div className={isMobile ? 'grid gap-4' : 'grid grid-cols-2 gap-4'}>
+                                <div className="grid gap-2">
+                                    <label htmlFor="authorName" className="text-sm font-medium">
+                                        Author name
+                                    </label>
+                                    <Input
+                                        id="authorName"
+                                        value={authorName}
+                                        onChange={(e) => setAuthorName(e.target.value)}
+                                        placeholder="Your name"
+                                        disabled={createCommitMutation.isPending}
+                                    />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <label htmlFor="authorEmail" className="text-sm font-medium">
+                                        Author email
+                                    </label>
+                                    <Input
+                                        id="authorEmail"
+                                        type="email"
+                                        value={authorEmail}
+                                        onChange={(e) => setAuthorEmail(e.target.value)}
+                                        placeholder="your@email.com"
+                                        disabled={createCommitMutation.isPending}
+                                    />
+                                </div>
+                            </div>
+                        )}
 
                         {staged.length > 0 && (
                             <div className="grid gap-2">

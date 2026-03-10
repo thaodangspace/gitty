@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -377,6 +378,10 @@ func (h *RepositoryHandler) GetFileTree(w http.ResponseWriter, r *http.Request) 
 func (h *RepositoryHandler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
+	decodedPath, err := url.PathUnescape(filePath)
+	if err != nil {
+		decodedPath = filePath // fallback to original if decoding fails
+	}
 
 	repo, exists := h.repositories[repoID]
 	if !exists {
@@ -384,7 +389,7 @@ func (h *RepositoryHandler) GetFileContent(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	content, err := h.gitService.GetFileContent(repo.Path, filePath)
+	content, err := h.gitService.GetFileContent(repo.Path, decodedPath)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get file content: %v", err), http.StatusInternalServerError)
 		return
@@ -397,6 +402,10 @@ func (h *RepositoryHandler) GetFileContent(w http.ResponseWriter, r *http.Reques
 func (h *RepositoryHandler) SaveFileContent(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
+	decodedPath, err := url.PathUnescape(filePath)
+	if err != nil {
+		decodedPath = filePath // fallback to original if decoding fails
+	}
 
 	repo, exists := h.repositories[repoID]
 	if !exists {
@@ -410,7 +419,7 @@ func (h *RepositoryHandler) SaveFileContent(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	err = h.gitService.SaveFileContent(repo.Path, filePath, content)
+	err = h.gitService.SaveFileContent(repo.Path, decodedPath, content)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to save file: %v", err), http.StatusInternalServerError)
 		return
@@ -539,6 +548,10 @@ func (h *RepositoryHandler) Pull(w http.ResponseWriter, r *http.Request) {
 func (h *RepositoryHandler) StageFile(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
+	decodedPath, err := url.PathUnescape(filePath)
+	if err != nil {
+		decodedPath = filePath // fallback to original if decoding fails
+	}
 
 	repo, exists := h.repositories[repoID]
 	if !exists {
@@ -546,7 +559,7 @@ func (h *RepositoryHandler) StageFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.gitService.StageFile(repo.Path, filePath)
+	err = h.gitService.StageFile(repo.Path, decodedPath)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to stage file: %v", err), http.StatusInternalServerError)
 		return
@@ -578,6 +591,10 @@ func (h *RepositoryHandler) StageAllFiles(w http.ResponseWriter, r *http.Request
 func (h *RepositoryHandler) UnstageFile(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
+	decodedPath, err := url.PathUnescape(filePath)
+	if err != nil {
+		decodedPath = filePath // fallback to original if decoding fails
+	}
 
 	repo, exists := h.repositories[repoID]
 	if !exists {
@@ -585,7 +602,7 @@ func (h *RepositoryHandler) UnstageFile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err := h.gitService.UnstageFile(repo.Path, filePath)
+	err = h.gitService.UnstageFile(repo.Path, decodedPath)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to unstage file: %v", err), http.StatusInternalServerError)
 		return
@@ -651,6 +668,10 @@ func (h *RepositoryHandler) DeleteBranch(w http.ResponseWriter, r *http.Request)
 func (h *RepositoryHandler) GetFileDiff(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
+	decodedPath, err := url.PathUnescape(filePath)
+	if err != nil {
+		decodedPath = filePath // fallback to original if decoding fails
+	}
 
 	repo, exists := h.repositories[repoID]
 	if !exists {
@@ -658,12 +679,12 @@ func (h *RepositoryHandler) GetFileDiff(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if filePath == "" {
+	if decodedPath == "" {
 		http.Error(w, "File path is required", http.StatusBadRequest)
 		return
 	}
 
-	diff, err := h.gitService.GetFileDiff(repo.Path, filePath)
+	diff, err := h.gitService.GetFileDiff(repo.Path, decodedPath)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get file diff: %v", err), http.StatusInternalServerError)
 		return
@@ -723,4 +744,85 @@ func (h *RepositoryHandler) GenerateCommitMessage(w http.ResponseWriter, r *http
 	json.NewEncoder(w).Encode(models.GenerateCommitMessageResponse{
 		Message: message,
 	})
+}
+
+func (h *RepositoryHandler) GetGitConfig(w http.ResponseWriter, r *http.Request) {
+	repoID := chi.URLParam(r, "id")
+
+	repo, exists := h.repositories[repoID]
+	if !exists {
+		http.Error(w, "Repository not found", http.StatusNotFound)
+		return
+	}
+
+	config, err := h.gitService.GetGitConfig(repo.Path)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get git config: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(config)
+}
+
+// HandleTokenizedFileDiff returns a tokenized (syntax-highlighted) diff for a single file
+// GET /api/repos/{id}/diff/tokenized/*?staged=<bool>
+func (h *RepositoryHandler) HandleTokenizedFileDiff(w http.ResponseWriter, r *http.Request) {
+	repoID := chi.URLParam(r, "id")
+
+	repo, exists := h.repositories[repoID]
+	if !exists {
+		http.Error(w, "Repository not found", http.StatusNotFound)
+		return
+	}
+
+	// Get file path from URL wildcard
+	filePath := chi.URLParam(r, "*")
+	decodedPath, err := url.PathUnescape(filePath)
+	if err != nil {
+		decodedPath = filePath // fallback to original if decoding fails
+	}
+
+	if decodedPath == "" {
+		http.Error(w, "File path is required", http.StatusBadRequest)
+		return
+	}
+
+	staged := r.URL.Query().Get("staged") == "true"
+
+	tokenizedDiff, err := h.gitService.TokenizeDiffFromPatch(repo.Path, decodedPath, staged)
+	if err != nil {
+		http.Error(w, "Failed to get tokenized diff: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(tokenizedDiff)
+}
+
+// HandleTokenizedCommitDiff returns tokenized diffs for all files in a commit
+// GET /api/repos/{id}/diff/commit/tokenized?hash=<commit>
+func (h *RepositoryHandler) HandleTokenizedCommitDiff(w http.ResponseWriter, r *http.Request) {
+	repoID := chi.URLParam(r, "id")
+
+	repo, exists := h.repositories[repoID]
+	if !exists {
+		http.Error(w, "Repository not found", http.StatusNotFound)
+		return
+	}
+
+	hash := r.URL.Query().Get("hash")
+	if hash == "" {
+		http.Error(w, "Commit hash is required", http.StatusBadRequest)
+		return
+	}
+
+	tokenizedDiff, err := h.gitService.TokenizeCommitDiff(repo.Path, hash)
+	if err != nil {
+		http.Error(w, "Failed to get tokenized commit diff: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(tokenizedDiff)
 }

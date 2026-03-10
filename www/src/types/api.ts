@@ -123,6 +123,11 @@ export interface GenerateCommitMessageResponse {
   message: string; // JSON string containing { message: string, detail: string }
 }
 
+export interface GitConfig {
+  name: string;
+  email: string;
+}
+
 export interface ParsedCommitMessage {
   message: string; // title
   detail: string; // description

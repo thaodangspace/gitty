@@ -41,6 +41,7 @@ func NewRouter(dataPath string, cfg *config.Config) *chi.Mux {
 				r.Get("/commits", repoHandler.GetCommitHistory)
 				r.Get("/commits/{hash}", repoHandler.GetCommitDetails)
 				r.Get("/branches", repoHandler.GetBranches)
+				r.Get("/config/git", repoHandler.GetGitConfig)
 
 				r.Post("/commit", repoHandler.CreateCommit)
 				r.Post("/generate-commit-message", repoHandler.GenerateCommitMessage)
@@ -53,6 +54,8 @@ func NewRouter(dataPath string, cfg *config.Config) *chi.Mux {
 				r.Put("/files/*", repoHandler.SaveFileContent)
 
 				r.Get("/diff/*", repoHandler.GetFileDiff)
+				r.Get("/diff/tokenized/*", repoHandler.HandleTokenizedFileDiff)
+				r.Get("/diff/commit/tokenized", repoHandler.HandleTokenizedCommitDiff)
 
 				r.Post("/stage/*", repoHandler.StageFile)
 				r.Post("/stage-all", repoHandler.StageAllFiles)

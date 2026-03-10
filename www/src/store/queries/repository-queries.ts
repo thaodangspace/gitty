@@ -188,3 +188,12 @@ export const useGenerateCommitMessage = () => {
             apiClient.generateCommitMessage(repositoryId),
     });
 };
+
+export const useGitConfig = (id: string | undefined) => {
+    return useQuery({
+        queryKey: ['git-config', id],
+        queryFn: () => apiClient.getGitConfig(id!),
+        enabled: !!id,
+        staleTime: 5 * 60 * 1000, // 5 minutes - git config rarely changes
+    });
+};

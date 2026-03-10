@@ -10,6 +10,7 @@ import type {
     DirectoryListing,
     DirectoryEntry,
     GenerateCommitMessageResponse,
+    GitConfig,
 } from '../types/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
@@ -151,7 +152,8 @@ class ApiClient {
     }
 
     async stageFile(id: string, filePath: string): Promise<void> {
-        return this.request<void>(`/repos/${id}/stage/${filePath}`, {
+        const encodedPath = encodeURIComponent(filePath);
+        return this.request<void>(`/repos/${id}/stage/${encodedPath}`, {
             method: 'POST',
         });
     }
@@ -163,7 +165,8 @@ class ApiClient {
     }
 
     async unstageFile(id: string, filePath: string): Promise<void> {
-        return this.request<void>(`/repos/${id}/stage/${filePath}`, {
+        const encodedPath = encodeURIComponent(filePath);
+        return this.request<void>(`/repos/${id}/stage/${encodedPath}`, {
             method: 'DELETE',
         });
     }
@@ -174,7 +177,8 @@ class ApiClient {
     }
 
     async getFileContent(id: string, filePath: string): Promise<string> {
-        const response = await fetch(`${API_BASE_URL}/repos/${id}/files/${filePath}`);
+        const encodedPath = encodeURIComponent(filePath);
+        const response = await fetch(`${API_BASE_URL}/repos/${id}/files/${encodedPath}`);
         if (!response.ok) {
             throw new ApiError({
                 message: `Failed to fetch file: ${response.statusText}`,
@@ -185,7 +189,8 @@ class ApiClient {
     }
 
     async saveFileContent(id: string, filePath: string, content: string): Promise<void> {
-        return this.request<void>(`/repos/${id}/files/${filePath}`, {
+        const encodedPath = encodeURIComponent(filePath);
+        return this.request<void>(`/repos/${id}/files/${encodedPath}`, {
             method: 'PUT',
             body: content,
             headers: {
@@ -195,7 +200,8 @@ class ApiClient {
     }
 
     async getFileDiff(id: string, filePath: string): Promise<string> {
-        const response = await fetch(`${API_BASE_URL}/repos/${id}/diff/${filePath}`);
+        const encodedPath = encodeURIComponent(filePath);
+        const response = await fetch(`${API_BASE_URL}/repos/${id}/diff/${encodedPath}`);
         if (!response.ok) {
             throw new ApiError({
                 message: `Failed to fetch diff: ${response.statusText}`,
@@ -221,6 +227,10 @@ class ApiClient {
         return this.request<GenerateCommitMessageResponse>(`/repos/${id}/generate-commit-message`, {
             method: 'POST',
         });
+    }
+
+    async getGitConfig(id: string): Promise<GitConfig> {
+        return this.request<GitConfig>(`/repos/${id}/config/git`);
     }
 }
 
