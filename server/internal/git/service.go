@@ -421,6 +421,104 @@ func (s *Service) GetFileTree(repoPath string) ([]models.FileInfo, error) {
 	return files, err
 }
 
+// BrowseDirectory reads a single directory level with pagination
+// Unlike GetFileTree which recursively walks the entire tree, this only reads the immediate children
+func (s *Service) BrowseDirectory(repoPath, subPath string, offset, limit int) (*models.RepoDirectoryListing, error) {
+	// Resolve target path
+	targetPath := filepath.Join(repoPath, subPath)
+
+	// Validate path is within repo (security check)
+	cleanTarget := filepath.Clean(targetPath)
+	cleanRepo := filepath.Clean(repoPath)
+	if !strings.HasPrefix(cleanTarget, cleanRepo) {
+		return nil, fmt.Errorf("path outside repository")
+	}
+
+	// Read directory entries (non-recursive)
+	entries, err := os.ReadDir(targetPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read directory: %w", err)
+	}
+
+	// Initialize gitignore matcher
+	gitignore := NewGitIgnore(repoPath)
+
+	// Process entries
+	var fileInfos []models.FileInfo
+	for _, entry := range entries {
+		// SECURITY: Skip symlinks to prevent path traversal attacks
+		if entry.Type() == os.ModeSymlink {
+			continue
+		}
+
+		relativePath := filepath.Join(subPath, entry.Name())
+
+		// Skip .git directory
+		if entry.Name() == ".git" {
+			continue
+		}
+
+		// Skip gitignored entries
+		if gitignore.IsIgnored(relativePath, entry.IsDir()) {
+			continue
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		fileInfos = append(fileInfos, models.FileInfo{
+			Path:        relativePath,
+			Name:        entry.Name(),
+			IsDirectory: entry.IsDir(),
+			Size:        info.Size(),
+			ModTime:     info.ModTime(),
+			Mode:        info.Mode().String(),
+		})
+	}
+
+	// Sort: directories first, then alphabetically
+	sort.Slice(fileInfos, func(i, j int) bool {
+		if fileInfos[i].IsDirectory != fileInfos[j].IsDirectory {
+			return fileInfos[i].IsDirectory
+		}
+		return fileInfos[i].Name < fileInfos[j].Name
+	})
+
+	// Apply pagination
+	totalCount := len(fileInfos)
+	hasMore := offset+limit < totalCount
+
+	if offset > totalCount {
+		offset = totalCount
+	}
+	end := offset + limit
+	if end > totalCount {
+		end = totalCount
+	}
+
+	paginatedEntries := fileInfos[offset:end]
+
+	// Determine parent path
+	parentPath := ""
+	if subPath != "" {
+		parentPath = filepath.Dir(subPath)
+		if parentPath == "." {
+			parentPath = ""
+		}
+	}
+
+	return &models.RepoDirectoryListing{
+		Path:       subPath,
+		ParentPath: parentPath,
+		Entries:    paginatedEntries,
+		TotalCount: totalCount,
+		HasMore:    hasMore,
+		Offset:     offset,
+	}, nil
+}
+
 func (s *Service) Push(repoPath string) error {
 	repo, err := s.OpenRepository(repoPath)
 	if err != nil {

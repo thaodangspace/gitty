@@ -776,7 +776,7 @@ func TestDeleteBranch(t *testing.T) {
 
 func TestGetFileDiff(t *testing.T) {
 	service := NewService()
-	
+
 	tempDir, err := os.MkdirTemp("", "git_test")
 	if err != nil {
 		t.Fatal(err)
@@ -792,7 +792,7 @@ func TestGetFileDiff(t *testing.T) {
 	// Create initial file
 	filePath := "test.txt"
 	initialContent := []byte("Hello, World!")
-	
+
 	err = service.SaveFileContent(tempDir, filePath, initialContent)
 	if err != nil {
 		t.Fatal(err)
@@ -842,5 +842,224 @@ func TestGetFileDiff(t *testing.T) {
 
 	if !strings.Contains(diff, "Hello, Modified World!") {
 		t.Error("Diff should contain modified content")
+	}
+}
+
+func TestBrowseDirectory_Root(t *testing.T) {
+	service := NewService()
+
+	tempDir, err := os.MkdirTemp("", "git_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Initialize repository
+	_, err = service.InitRepository(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create some test files and directories
+	testFiles := []string{
+		"file1.txt",
+		"file2.txt",
+		"dir1",
+		"dir2",
+	}
+
+	for _, name := range testFiles {
+		fullPath := filepath.Join(tempDir, name)
+		if strings.HasSuffix(name, ".txt") {
+			err = os.WriteFile(fullPath, []byte("test"), 0644)
+		} else {
+			err = os.MkdirAll(fullPath, 0755)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Browse root directory
+	listing, err := service.BrowseDirectory(tempDir, "", 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if listing == nil {
+		t.Fatal("BrowseDirectory returned nil")
+	}
+
+	// Should have 4 entries (2 files + 2 dirs)
+	if len(listing.Entries) != 4 {
+		t.Errorf("Expected 4 entries, got %d", len(listing.Entries))
+	}
+
+	// Check path is empty for root
+	if listing.Path != "" {
+		t.Errorf("Expected empty path for root, got %s", listing.Path)
+	}
+
+	// Check parent path is empty for root
+	if listing.ParentPath != "" {
+		t.Errorf("Expected empty parent_path for root, got %s", listing.ParentPath)
+	}
+
+	// Directories should come first
+	if !listing.Entries[0].IsDirectory || !listing.Entries[1].IsDirectory {
+		t.Error("Directories should be listed first")
+	}
+}
+
+func TestBrowseDirectory_Subdirectory(t *testing.T) {
+	service := NewService()
+
+	tempDir, err := os.MkdirTemp("", "git_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Initialize repository
+	_, err = service.InitRepository(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create nested structure
+	err = os.MkdirAll(filepath.Join(tempDir, "src", "components"), 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(filepath.Join(tempDir, "src", "components", "Button.tsx"), []byte("btn"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(filepath.Join(tempDir, "src", "index.ts"), []byte("idx"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Browse src directory
+	listing, err := service.BrowseDirectory(tempDir, "src", 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should have components dir and index.ts file
+	if len(listing.Entries) != 2 {
+		t.Errorf("Expected 2 entries in src, got %d", len(listing.Entries))
+	}
+
+	// Check path
+	if listing.Path != "src" {
+		t.Errorf("Expected path 'src', got %s", listing.Path)
+	}
+
+	// Check parent path
+	if listing.ParentPath != "" {
+		t.Errorf("Expected empty parent_path, got %s", listing.ParentPath)
+	}
+
+	// Browse src/components directory
+	listing, err = service.BrowseDirectory(tempDir, "src/components", 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(listing.Entries) != 1 {
+		t.Errorf("Expected 1 entry in components, got %d", len(listing.Entries))
+	}
+
+	// Check parent path
+	if listing.ParentPath != "src" {
+		t.Errorf("Expected parent_path 'src', got %s", listing.ParentPath)
+	}
+}
+
+func TestBrowseDirectory_Pagination(t *testing.T) {
+	service := NewService()
+
+	tempDir, err := os.MkdirTemp("", "git_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Initialize repository
+	_, err = service.InitRepository(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create 10 files
+	for i := 0; i < 10; i++ {
+		err = os.WriteFile(filepath.Join(tempDir, fmt.Sprintf("file%d.txt", i)), []byte("test"), 0644)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Get first page of 5
+	listing, err := service.BrowseDirectory(tempDir, "", 0, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(listing.Entries) != 5 {
+		t.Errorf("Expected 5 entries, got %d", len(listing.Entries))
+	}
+
+	if listing.TotalCount != 10 {
+		t.Errorf("Expected total_count 10, got %d", listing.TotalCount)
+	}
+
+	if !listing.HasMore {
+		t.Error("Expected has_more to be true")
+	}
+
+	if listing.Offset != 0 {
+		t.Errorf("Expected offset 0, got %d", listing.Offset)
+	}
+
+	// Get second page
+	listing2, err := service.BrowseDirectory(tempDir, "", 5, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(listing2.Entries) != 5 {
+		t.Errorf("Expected 5 entries, got %d", len(listing2.Entries))
+	}
+
+	if listing2.HasMore {
+		t.Error("Expected has_more to be false")
+	}
+
+	// Verify different files
+	if listing.Entries[0].Name == listing2.Entries[0].Name {
+		t.Error("Pages should have different files")
+	}
+}
+
+func TestBrowseDirectory_PathTraversal(t *testing.T) {
+	service := NewService()
+
+	tempDir, err := os.MkdirTemp("", "git_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Initialize repository
+	_, err = service.InitRepository(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Try to escape with ..
+	_, err = service.BrowseDirectory(tempDir, "../", 0, 100)
+	if err == nil {
+		t.Error("Expected error for path traversal")
 	}
 }
