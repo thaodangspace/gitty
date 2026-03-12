@@ -117,6 +117,17 @@ type DirectoryListing struct {
 	CanGoUp     bool             `json:"can_go_up"`
 }
 
+// RepoDirectoryListing is the response for browsing a repository directory
+// Unlike DirectoryListing (for filesystem), this uses FileInfo and supports pagination
+type RepoDirectoryListing struct {
+	Path       string     `json:"path"`        // Current directory path (empty for root)
+	ParentPath string     `json:"parent_path"` // Parent directory (empty if root)
+	Entries    []FileInfo `json:"entries"`     // Files and directories in current path
+	TotalCount int        `json:"total_count"` // Total entries in directory (before pagination)
+	HasMore    bool       `json:"has_more"`    // True if more entries exist
+	Offset     int        `json:"offset"`      // Current pagination offset
+}
+
 type CommitDetail struct {
 	Hash       string     `json:"hash"`
 	Message    string     `json:"message"`
