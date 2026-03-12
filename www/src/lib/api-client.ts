@@ -11,6 +11,7 @@ import type {
     DirectoryEntry,
     GenerateCommitMessageResponse,
     GitConfig,
+    RepoDirectoryListing,
 } from '../types/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
@@ -174,6 +175,20 @@ class ApiClient {
     // File operations
     async getFileTree(id: string): Promise<FileInfo[]> {
         return this.request<FileInfo[]>(`/repos/${id}/files`);
+    }
+
+    async browseRepoDirectory(
+        id: string,
+        path: string = '',
+        offset: number = 0,
+        limit: number = 500
+    ): Promise<RepoDirectoryListing> {
+        const params = new URLSearchParams({
+            path,
+            offset: String(offset),
+            limit: String(limit),
+        });
+        return this.request<RepoDirectoryListing>(`/repos/${id}/files?${params}`);
     }
 
     async getFileContent(id: string, filePath: string): Promise<string> {
