@@ -10,6 +10,7 @@ export const queryKeys = {
     commitHistory: (id: string, limit?: number) => ['repository', id, 'commits', limit] as const,
     branches: (id: string) => ['repository', id, 'branches'] as const,
     fileTree: (id: string) => ['repository', id, 'files'] as const,
+    repoDirectory: (id: string, path: string) => ['repository', id, 'directory', path] as const,
     fileContent: (id: string, path: string) => ['repository', id, 'file', path] as const,
     directoryBrowse: (path?: string) => ['filesystem', 'browse', path] as const,
     volumeRoots: ['filesystem', 'roots'] as const,
@@ -77,6 +78,15 @@ export const useFileTree = (id: string) => {
         queryKey: queryKeys.fileTree(id),
         queryFn: () => apiClient.getFileTree(id),
         enabled: !!id,
+    });
+};
+
+export const useRepoDirectoryListing = (repoId: string, path: string = '') => {
+    return useQuery({
+        queryKey: queryKeys.repoDirectory(repoId, path),
+        queryFn: () => apiClient.browseRepoDirectory(repoId, path),
+        enabled: !!repoId,
+        staleTime: 30_000, // Cache for 30 seconds
     });
 };
 
