@@ -1,252 +1,276 @@
 import type {
-    Repository,
-    RepositoryStatus,
-    Branch,
-    Commit,
-    CommitDetail,
-    FileInfo,
-    CreateRepositoryRequest,
-    CommitRequest,
-    DirectoryListing,
-    DirectoryEntry,
-    GenerateCommitMessageResponse,
-    GitConfig,
-    RepoDirectoryListing,
-} from '../types/api';
+  Repository,
+  RepositoryStatus,
+  Branch,
+  Commit,
+  CommitDetail,
+  FileInfo,
+  CreateRepositoryRequest,
+  CommitRequest,
+  DirectoryListing,
+  DirectoryEntry,
+  GenerateCommitMessageResponse,
+  GitConfig,
+  RepoDirectoryListing,
+} from "../types/api";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_API_BASE || "http://localhost:8080";
 
 class ApiClient {
-    private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-        const url = `${API_BASE_URL}${endpoint}`;
-        console.log('API Client - Making request to:', url);
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {},
+  ): Promise<T> {
+    const url = `${API_BASE_URL}${endpoint}`;
+    console.log("API Client - Making request to:", url);
 
-        const config: RequestInit = {
-            headers: {
-                'Content-Type': 'application/json',
-                ...options.headers,
-            },
-            ...options,
-        };
+    const config: RequestInit = {
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+      ...options,
+    };
 
-        try {
-            const response = await fetch(url, config);
-            console.log('API Client - Response status:', response.status);
+    try {
+      const response = await fetch(url, config);
+      console.log("API Client - Response status:", response.status);
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('API Client - Error response:', errorText);
-                throw new ApiError({
-                    message: errorText || `HTTP ${response.status}: ${response.statusText}`,
-                    status: response.status,
-                });
-            }
-
-            if (response.status === 204) {
-                return {} as T;
-            }
-
-            const data = await response.json();
-            console.log('API Client - Response data:', data);
-            return data;
-        } catch (error) {
-            console.error('API Client - Request failed:', error);
-            if (error instanceof ApiError) {
-                throw error;
-            }
-            throw new ApiError({
-                message: error instanceof Error ? error.message : 'Network error',
-                status: 0,
-            });
-        }
-    }
-
-    // Repository management
-    async getRepositories(): Promise<Repository[]> {
-        return this.request<Repository[]>('/repos');
-    }
-
-    async getRepository(id: string): Promise<Repository> {
-        return this.request<Repository>(`/repos/${id}`);
-    }
-
-    async createRepository(data: CreateRepositoryRequest): Promise<Repository> {
-        return this.request<Repository>('/repos', {
-            method: 'POST',
-            body: JSON.stringify(data),
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("API Client - Error response:", errorText);
+        throw new ApiError({
+          message:
+            errorText || `HTTP ${response.status}: ${response.statusText}`,
+          status: response.status,
         });
-    }
+      }
 
-    async importRepository(data: { path: string; name?: string }): Promise<Repository> {
-        return this.request<Repository>('/repos/import', {
-            method: 'POST',
-            body: JSON.stringify(data),
-        });
-    }
+      if (response.status === 204) {
+        return {} as T;
+      }
 
-    async deleteRepository(id: string): Promise<void> {
-        return this.request<void>(`/repos/${id}`, {
-            method: 'DELETE',
-        });
+      const data = await response.json();
+      console.log("API Client - Response data:", data);
+      return data;
+    } catch (error) {
+      console.error("API Client - Request failed:", error);
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError({
+        message: error instanceof Error ? error.message : "Network error",
+        status: 0,
+      });
     }
+  }
 
-    // Repository status and Git operations
-    async getRepositoryStatus(id: string, wait = false): Promise<RepositoryStatus> {
-        const url = wait ? `/repos/${id}/status?wait=true` : `/repos/${id}/status`;
-        return this.request<RepositoryStatus>(url);
-    }
+  // Repository management
+  async getRepositories(): Promise<Repository[]> {
+    return this.request<Repository[]>("/repos");
+  }
 
-    async getCommitHistory(id: string, limit = 50): Promise<Commit[]> {
-        return this.request<Commit[]>(`/repos/${id}/commits?limit=${limit}`);
-    }
+  async getRepository(id: string): Promise<Repository> {
+    return this.request<Repository>(`/repos/${id}`);
+  }
 
-    async getCommitDetails(id: string, commitHash: string): Promise<CommitDetail> {
-        return this.request<CommitDetail>(`/repos/${id}/commits/${commitHash}`);
-    }
+  async createRepository(data: CreateRepositoryRequest): Promise<Repository> {
+    return this.request<Repository>("/repos", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
 
-    async getBranches(id: string): Promise<Branch[]> {
-        return this.request<Branch[]>(`/repos/${id}/branches`);
-    }
+  async importRepository(data: {
+    path: string;
+    name?: string;
+  }): Promise<Repository> {
+    return this.request<Repository>("/repos/import", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
 
-    async createCommit(id: string, data: CommitRequest): Promise<void> {
-        return this.request<void>(`/repos/${id}/commit`, {
-            method: 'POST',
-            body: JSON.stringify(data),
-        });
-    }
+  async deleteRepository(id: string): Promise<void> {
+    return this.request<void>(`/repos/${id}`, {
+      method: "DELETE",
+    });
+  }
 
-    async createBranch(id: string, name: string): Promise<void> {
-        return this.request<void>(`/repos/${id}/branches`, {
-            method: 'POST',
-            body: JSON.stringify({ name }),
-        });
-    }
+  // Repository status and Git operations
+  async getRepositoryStatus(
+    id: string,
+    wait = false,
+  ): Promise<RepositoryStatus> {
+    const url = wait ? `/repos/${id}/status?wait=true` : `/repos/${id}/status`;
+    return this.request<RepositoryStatus>(url);
+  }
 
-    async switchBranch(id: string, branch: string): Promise<void> {
-        return this.request<void>(`/repos/${id}/branches/${branch}`, {
-            method: 'PUT',
-        });
-    }
+  async getCommitHistory(id: string, limit = 50): Promise<Commit[]> {
+    return this.request<Commit[]>(`/repos/${id}/commits?limit=${limit}`);
+  }
 
-    async deleteBranch(id: string, branch: string): Promise<void> {
-        return this.request<void>(`/repos/${id}/branches/${branch}`, {
-            method: 'DELETE',
-        });
-    }
+  async getCommitDetails(
+    id: string,
+    commitHash: string,
+  ): Promise<CommitDetail> {
+    return this.request<CommitDetail>(`/repos/${id}/commits/${commitHash}`);
+  }
 
-    async push(id: string): Promise<void> {
-        return this.request<void>(`/repos/${id}/push`, {
-            method: 'POST',
-        });
-    }
+  async getBranches(id: string): Promise<Branch[]> {
+    return this.request<Branch[]>(`/repos/${id}/branches`);
+  }
 
-    async forcePush(id: string): Promise<void> {
-        return this.request<void>(`/repos/${id}/push/force`, {
-            method: 'POST',
-        });
-    }
+  async createCommit(id: string, data: CommitRequest): Promise<void> {
+    return this.request<void>(`/repos/${id}/commit`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
 
-    async pull(id: string): Promise<void> {
-        return this.request<void>(`/repos/${id}/pull`, {
-            method: 'POST',
-        });
-    }
+  async createBranch(id: string, name: string): Promise<void> {
+    return this.request<void>(`/repos/${id}/branches`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+  }
 
-    async stageFile(id: string, filePath: string): Promise<void> {
-        const encodedPath = encodeURIComponent(filePath);
-        return this.request<void>(`/repos/${id}/stage/${encodedPath}`, {
-            method: 'POST',
-        });
-    }
+  async switchBranch(id: string, branch: string): Promise<void> {
+    return this.request<void>(`/repos/${id}/branches/${branch}`, {
+      method: "PUT",
+    });
+  }
 
-    async stageAllFiles(id: string): Promise<void> {
-        return this.request<void>(`/repos/${id}/stage-all`, {
-            method: 'POST',
-        });
-    }
+  async deleteBranch(id: string, branch: string): Promise<void> {
+    return this.request<void>(`/repos/${id}/branches/${branch}`, {
+      method: "DELETE",
+    });
+  }
 
-    async unstageFile(id: string, filePath: string): Promise<void> {
-        const encodedPath = encodeURIComponent(filePath);
-        return this.request<void>(`/repos/${id}/stage/${encodedPath}`, {
-            method: 'DELETE',
-        });
-    }
+  async push(id: string): Promise<void> {
+    return this.request<void>(`/repos/${id}/push`, {
+      method: "POST",
+    });
+  }
 
-    // File operations
-    async getFileTree(id: string): Promise<FileInfo[]> {
-        return this.request<FileInfo[]>(`/repos/${id}/files`);
-    }
+  async forcePush(id: string): Promise<void> {
+    return this.request<void>(`/repos/${id}/push/force`, {
+      method: "POST",
+    });
+  }
 
-    async browseRepoDirectory(
-        id: string,
-        path: string = '',
-        offset: number = 0,
-        limit: number = 500
-    ): Promise<RepoDirectoryListing> {
-        const params = new URLSearchParams({
-            path,
-            offset: String(offset),
-            limit: String(limit),
-        });
-        return this.request<RepoDirectoryListing>(`/repos/${id}/files?${params}`);
-    }
+  async pull(id: string): Promise<void> {
+    return this.request<void>(`/repos/${id}/pull`, {
+      method: "POST",
+    });
+  }
 
-    async getFileContent(id: string, filePath: string): Promise<string> {
-        const encodedPath = encodeURIComponent(filePath);
-        const response = await fetch(`${API_BASE_URL}/repos/${id}/files/${encodedPath}`);
-        if (!response.ok) {
-            throw new ApiError({
-                message: `Failed to fetch file: ${response.statusText}`,
-                status: response.status,
-            });
-        }
-        return response.text();
-    }
+  async stageFile(id: string, filePath: string): Promise<void> {
+    const encodedPath = encodeURIComponent(filePath);
+    return this.request<void>(`/repos/${id}/stage/${encodedPath}`, {
+      method: "POST",
+    });
+  }
 
-    async saveFileContent(id: string, filePath: string, content: string): Promise<void> {
-        const encodedPath = encodeURIComponent(filePath);
-        return this.request<void>(`/repos/${id}/files/${encodedPath}`, {
-            method: 'PUT',
-            body: content,
-            headers: {
-                'Content-Type': 'text/plain',
-            },
-        });
-    }
+  async stageAllFiles(id: string): Promise<void> {
+    return this.request<void>(`/repos/${id}/stage-all`, {
+      method: "POST",
+    });
+  }
 
-    async getFileDiff(id: string, filePath: string): Promise<string> {
-        const encodedPath = encodeURIComponent(filePath);
-        const response = await fetch(`${API_BASE_URL}/api/repos/${id}/diff/${encodedPath}`);
-        if (!response.ok) {
-            throw new ApiError({
-                message: `Failed to fetch diff: ${response.statusText}`,
-                status: response.status,
-            });
-        }
-        return response.text();
-    }
+  async unstageFile(id: string, filePath: string): Promise<void> {
+    const encodedPath = encodeURIComponent(filePath);
+    return this.request<void>(`/repos/${id}/stage/${encodedPath}`, {
+      method: "DELETE",
+    });
+  }
 
-    // Filesystem browsing
-    async browseDirectory(path?: string): Promise<DirectoryListing> {
-        const url = path
-            ? `/filesystem/browse?path=${encodeURIComponent(path)}`
-            : '/filesystem/browse';
-        return this.request<DirectoryListing>(url);
-    }
+  // File operations
+  async getFileTree(id: string): Promise<FileInfo[]> {
+    return this.request<FileInfo[]>(`/repos/${id}/files`);
+  }
 
-    async getVolumeRoots(): Promise<{ roots: DirectoryEntry[] }> {
-        return this.request<{ roots: DirectoryEntry[] }>('/filesystem/roots');
-    }
+  async browseRepoDirectory(
+    id: string,
+    path: string = "",
+    offset: number = 0,
+    limit: number = 500,
+  ): Promise<RepoDirectoryListing> {
+    const params = new URLSearchParams({
+      path,
+      offset: String(offset),
+      limit: String(limit),
+    });
+    return this.request<RepoDirectoryListing>(`/repos/${id}/files?${params}`);
+  }
 
-    async generateCommitMessage(id: string): Promise<GenerateCommitMessageResponse> {
-        return this.request<GenerateCommitMessageResponse>(`/repos/${id}/generate-commit-message`, {
-            method: 'POST',
-        });
+  async getFileContent(id: string, filePath: string): Promise<string> {
+    const encodedPath = encodeURIComponent(filePath);
+    const response = await fetch(
+      `${API_BASE_URL}/repos/${id}/files/${encodedPath}`,
+    );
+    if (!response.ok) {
+      throw new ApiError({
+        message: `Failed to fetch file: ${response.statusText}`,
+        status: response.status,
+      });
     }
+    return response.text();
+  }
 
-    async getGitConfig(id: string): Promise<GitConfig> {
-        return this.request<GitConfig>(`/repos/${id}/config/git`);
+  async saveFileContent(
+    id: string,
+    filePath: string,
+    content: string,
+  ): Promise<void> {
+    const encodedPath = encodeURIComponent(filePath);
+    return this.request<void>(`/repos/${id}/files/${encodedPath}`, {
+      method: "PUT",
+      body: content,
+      headers: {
+        "Content-Type": "text/plain",
+      },
+    });
+  }
+
+  async getFileDiff(id: string, filePath: string): Promise<string> {
+    const encodedPath = encodeURIComponent(filePath);
+    const response = await fetch(`/repos/${id}/diff/${encodedPath}`);
+    if (!response.ok) {
+      throw new ApiError({
+        message: `Failed to fetch diff: ${response.statusText}`,
+        status: response.status,
+      });
     }
+    return response.text();
+  }
+
+  // Filesystem browsing
+  async browseDirectory(path?: string): Promise<DirectoryListing> {
+    const url = path
+      ? `/filesystem/browse?path=${encodeURIComponent(path)}`
+      : "/filesystem/browse";
+    return this.request<DirectoryListing>(url);
+  }
+
+  async getVolumeRoots(): Promise<{ roots: DirectoryEntry[] }> {
+    return this.request<{ roots: DirectoryEntry[] }>("/filesystem/roots");
+  }
+
+  async generateCommitMessage(
+    id: string,
+  ): Promise<GenerateCommitMessageResponse> {
+    return this.request<GenerateCommitMessageResponse>(
+      `/repos/${id}/generate-commit-message`,
+      {
+        method: "POST",
+      },
+    );
+  }
+
+  async getGitConfig(id: string): Promise<GitConfig> {
+    return this.request<GitConfig>(`/repos/${id}/config/git`);
+  }
 }
 
 // Create API client instance
@@ -254,11 +278,11 @@ export const apiClient = new ApiClient();
 
 // Custom error class
 class ApiError extends Error {
-    details: { message: string; status: number };
+  details: { message: string; status: number };
 
-    constructor(details: { message: string; status: number }) {
-        super(details.message);
-        this.name = 'ApiError';
-        this.details = details;
-    }
+  constructor(details: { message: string; status: number }) {
+    super(details.message);
+    this.name = "ApiError";
+    this.details = details;
+  }
 }
