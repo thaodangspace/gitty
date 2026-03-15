@@ -248,6 +248,16 @@ class ApiClient {
     async getGitConfig(id: string): Promise<GitConfig> {
         return this.request<GitConfig>(`/repos/${id}/config/git`);
     }
+
+    async getTokenizedFileDiff(
+        id: string,
+        filePath: string,
+        staged: boolean = false,
+    ): Promise<TokenizedDiff> {
+        const encodedPath = encodeURIComponent(filePath);
+        const url = `/repos/${id}/diff/tokenized/${encodedPath}?staged=${staged}`;
+        return this.request<TokenizedDiff>(url);
+    }
 }
 
 // Create API client instance
