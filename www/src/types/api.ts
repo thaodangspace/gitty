@@ -90,6 +90,16 @@ export interface DirectoryListing {
   can_go_up: boolean;
 }
 
+// Response for browsing a repository directory (lazy-loading)
+export interface RepoDirectoryListing {
+  path: string;           // Current directory path (empty for root)
+  parent_path: string;    // Parent directory (empty if root)
+  entries: FileInfo[];    // Files and directories in current path
+  total_count: number;    // Total entries in directory (before pagination)
+  has_more: boolean;      // True if more entries exist
+  offset: number;         // Current pagination offset
+}
+
 export interface ApiError {
   message: string;
   status: number;
@@ -131,4 +141,45 @@ export interface GitConfig {
 export interface ParsedCommitMessage {
   message: string; // title
   detail: string; // description
+}
+
+// ─── TOKENIZED DIFF TYPES ───
+
+// Token - a syntax-highlighted text fragment
+export interface Token {
+  text: string;
+  color: string;
+}
+
+// DiffLineTokenized - single line in a diff hunk
+export interface DiffLineTokenized {
+  type: 'added' | 'deleted' | 'context';
+  tokens: Token[];
+  oldNum?: number;
+  newNum?: number;
+}
+
+// DiffBlock - a group of consecutive lines of the same type
+export interface DiffBlock {
+  type: 'added' | 'deleted' | 'context';
+  lines: DiffLineTokenized[];
+  startOld: number;
+  endOld: number;
+  startNew: number;
+  endNew: number;
+  collapsed: boolean;
+}
+
+// DiffHunkTokenized - contiguous section of changed lines
+export interface DiffHunkTokenized {
+  header: string;
+  blocks: DiffBlock[];
+}
+
+// TokenizedDiff - complete tokenized diff for a single file
+export interface TokenizedDiff {
+  filename: string;
+  hunks: DiffHunkTokenized[];
+  additions: number;
+  deletions: number;
 }

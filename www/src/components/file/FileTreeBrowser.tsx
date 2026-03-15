@@ -1,16 +1,17 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useAtom } from 'jotai';
-import { selectedRepositoryAtom, selectedFilesAtom, vimModeEnabledAtom, vimFocusContextAtom, vimFocusIndexAtom } from '@/store/atoms';
-import { useQuery } from '@tanstack/react-query';
+import { selectedRepositoryAtom, selectedFilesAtom, vimModeEnabledAtom, vimFocusContextAtom } from '@/store/atoms';
+import { useQueries } from '@tanstack/react-query';
+import { useRepoDirectoryListing } from '@/hooks/api';
 import { apiClient } from '@/lib/api-client';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { useVimNavigation } from '@/hooks/use-vim-navigation';
-import { 
-    ChevronRight, 
-    ChevronDown, 
-    File, 
-    Folder, 
+import {
+    ChevronRight,
+    ChevronDown,
+    File,
+    Folder,
     FolderOpen,
     Loader2,
     AlertCircle
@@ -25,120 +26,76 @@ interface TreeNode extends FileInfo {
     children?: TreeNode[];
     isExpanded?: boolean;
     level: number;
+    isLoading?: boolean;
 }
 
 export default function FileTreeBrowser({ onFileSelect }: FileTreeBrowserProps = {}) {
     const [currentRepository] = useAtom(selectedRepositoryAtom);
     const [selectedFiles, setSelectedFiles] = useAtom(selectedFilesAtom);
-    const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
+    const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+    const [filterText, setFilterText] = useState('');
     const isMobile = useIsMobile();
 
     // Vim navigation
     const [vimEnabled] = useAtom(vimModeEnabledAtom);
-    const [vimContext, setVimContext] = useAtom(vimFocusContextAtom);
-    const [vimIndex] = useAtom(vimFocusIndexAtom);
+    const [, setVimContext] = useAtom(vimFocusContextAtom);
 
-    const { data: files, isLoading, error } = useQuery({
-        queryKey: ['file-tree', currentRepository?.id],
-        queryFn: () => apiClient.getFileTree(currentRepository!.id),
-        enabled: !!currentRepository?.id,
+    // Load root directory
+    const rootQuery = useRepoDirectoryListing(currentRepository?.id || '', '');
+
+    // Load each expanded directory using useQueries
+    const expandedQueries = useQueries({
+        queries: Array.from(expandedPaths).map(path => ({
+            queryKey: ['repository', currentRepository?.id, 'directory', path],
+            queryFn: () => apiClient.browseRepoDirectory(currentRepository!.id, path),
+            enabled: !!currentRepository?.id && expandedPaths.has(path),
+            staleTime: 30_000,
+        })),
     });
 
-    const buildFileTree = (files: FileInfo[]): TreeNode[] => {
-        const root: TreeNode[] = [];
-        const map = new Map<string, TreeNode>();
+    // Build a map of path -> entries from queries
+    const directoryMap = useMemo(() => {
+        const map = new Map<string, FileInfo[]>();
 
-        // Sort files - directories first, then by name
-        const sortedFiles = [...(files || [])].sort((a, b) => {
-            if (a.is_directory !== b.is_directory) {
-                return a.is_directory ? -1 : 1;
-            }
-            return a.name.localeCompare(b.name);
-        });
-
-        // Create tree structure
-        sortedFiles.forEach(file => {
-            const pathParts = file.path.split('/').filter(Boolean);
-            let currentLevel = root;
-            let currentPath = '';
-            
-            pathParts.forEach((part, index) => {
-                currentPath += (currentPath ? '/' : '') + part;
-                const isLast = index === pathParts.length - 1;
-                
-                if (isLast) {
-                    // This is the actual file/directory from the backend
-                    // Check if a node with this path already exists (from intermediate directory creation)
-                    let existingNode = map.get(file.path);
-                    if (existingNode) {
-                        // Update the existing node with real data from backend
-                        existingNode.size = file.size;
-                        existingNode.mod_time = file.mod_time;
-                        existingNode.mode = file.mode;
-                        existingNode.level = index;
-                    } else {
-                        // Create new node
-                        const node: TreeNode = {
-                            ...file,
-                            level: index,
-                            children: file.is_directory ? [] : undefined,
-                            isExpanded: expandedDirs.has(file.path)
-                        };
-                        currentLevel.push(node);
-                        map.set(file.path, node);
-                    }
-                } else {
-                    // This is a parent directory we need to create if it doesn't exist
-                    let existingNode = currentLevel.find(n => n.name === part);
-                    if (!existingNode) {
-                        existingNode = {
-                            path: currentPath,
-                            name: part,
-                            is_directory: true,
-                            size: 0,
-                            mod_time: '',
-                            mode: '',
-                            level: index,
-                            children: [],
-                            isExpanded: expandedDirs.has(currentPath)
-                        };
-                        currentLevel.push(existingNode);
-                        map.set(currentPath, existingNode);
-                    }
-                    currentLevel = existingNode.children!;
-                }
-            });
-        });
-
-        return root;
-    };
-
-    const toggleDirectory = (path: string) => {
-        setExpandedDirs(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(path)) {
-                newSet.delete(path);
-            } else {
-                newSet.add(path);
-            }
-            return newSet;
-        });
-    };
-
-    const selectFile = (file: TreeNode) => {
-        if (file.is_directory) {
-            toggleDirectory(file.path);
-        } else {
-            setSelectedFiles([file.path]);
-            // Close mobile drawer when file is selected
-            if (isMobile && onFileSelect) {
-                onFileSelect();
-            }
+        if (rootQuery.data?.entries) {
+            map.set('', rootQuery.data.entries);
         }
-    };
 
-    // Flatten tree to get visible nodes for vim navigation
-    const flattenTree = (nodes: TreeNode[]): TreeNode[] => {
+        const expandedPathsArray = Array.from(expandedPaths);
+        expandedPathsArray.forEach((path, index) => {
+            const query = expandedQueries[index];
+            if (query.data?.entries) {
+                map.set(path, query.data.entries);
+            }
+        });
+
+        return map;
+    }, [rootQuery.data, expandedQueries, expandedPaths]);
+
+    // Build file tree from directory map
+    const buildFileTree = useCallback((entries: FileInfo[] | undefined, level: number): TreeNode[] => {
+        if (!Array.isArray(entries)) return [];
+        return entries.map(entry => {
+            const isExpanded = expandedPaths.has(entry.path);
+            const children = isExpanded && directoryMap.has(entry.path)
+                ? buildFileTree(directoryMap.get(entry.path)!, level + 1)
+                : undefined;
+
+            return {
+                ...entry,
+                children,
+                isExpanded,
+                level,
+                isLoading: isExpanded && !directoryMap.has(entry.path),
+            };
+        });
+    }, [directoryMap, expandedPaths]);
+
+    const rootEntries = rootQuery.data?.entries || [];
+    const fileTree = useMemo(() => buildFileTree(rootEntries, 0), [rootEntries, buildFileTree]);
+
+    // Flatten tree for vim navigation
+    const flattenTree = useCallback((nodes: TreeNode[]): TreeNode[] => {
         const flattened: TreeNode[] = [];
         const traverse = (nodeList: TreeNode[]) => {
             nodeList.forEach(node => {
@@ -150,13 +107,37 @@ export default function FileTreeBrowser({ onFileSelect }: FileTreeBrowserProps =
         };
         traverse(nodes);
         return flattened;
-    };
+    }, []);
 
-    const fileTree = buildFileTree(files || []);
-    const flattenedNodes = useMemo(() => flattenTree(fileTree), [fileTree, expandedDirs]);
+    const flattenedNodes = useMemo(() => flattenTree(fileTree), [fileTree, flattenTree]);
+
+    // Toggle directory expansion
+    const toggleDirectory = useCallback((path: string) => {
+        setExpandedPaths(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(path)) {
+                newSet.delete(path);
+            } else {
+                newSet.add(path);
+            }
+            return newSet;
+        });
+    }, []);
+
+    // Select file
+    const selectFile = useCallback((node: TreeNode) => {
+        if (node.is_directory) {
+            toggleDirectory(node.path);
+        } else {
+            setSelectedFiles([node.path]);
+            if (isMobile && onFileSelect) {
+                onFileSelect();
+            }
+        }
+    }, [toggleDirectory, setSelectedFiles, isMobile, onFileSelect]);
 
     // Vim navigation setup
-    const { isVimActive, currentIndex, activateContext } = useVimNavigation({
+    const { isVimActive, currentIndex } = useVimNavigation({
         context: 'file-tree',
         itemCount: flattenedNodes.length,
         onActivate: (index) => {
@@ -178,20 +159,22 @@ export default function FileTreeBrowser({ onFileSelect }: FileTreeBrowserProps =
         },
     });
 
-    // Auto-activate this context when vim is enabled and we're in this view
-    useEffect(() => {
-        if (vimEnabled && flattenedNodes.length > 0 && vimContext === 'none') {
-            activateContext();
-        }
-    }, [vimEnabled, flattenedNodes.length, vimContext, activateContext]);
-
-    // Handle clicking on the container to activate vim context
-    const handleContainerClick = () => {
+    // Handle container click for vim activation
+    const handleContainerClick = useCallback(() => {
         if (vimEnabled && flattenedNodes.length > 0) {
             setVimContext('file-tree');
         }
-    };
+    }, [vimEnabled, flattenedNodes.length, setVimContext]);
 
+    // Filter entries
+    const filterEntries = useCallback((entries: TreeNode[]): TreeNode[] => {
+        if (!filterText) return entries;
+        return entries.filter(e =>
+            e.name.toLowerCase().includes(filterText.toLowerCase())
+        );
+    }, [filterText]);
+
+    // Render tree node
     const renderTreeNode = (node: TreeNode, index: number) => {
         const isSelected = selectedFiles.includes(node.path);
         const isVimFocused = isVimActive && currentIndex === index;
@@ -210,16 +193,18 @@ export default function FileTreeBrowser({ onFileSelect }: FileTreeBrowserProps =
                 >
                     {node.is_directory && (
                         <Button variant="ghost" size="sm" className="h-4 w-4 p-0 mr-1">
-                            {node.isExpanded ? (
+                            {node.isLoading ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : node.isExpanded ? (
                                 <ChevronDown className="h-3 w-3" />
                             ) : (
                                 <ChevronRight className="h-3 w-3" />
                             )}
                         </Button>
                     )}
-                    
+
                     {!node.is_directory && <div className="w-5" />}
-                    
+
                     <div className="flex items-center gap-1 flex-1 min-w-0">
                         {node.is_directory ? (
                             node.isExpanded ? (
@@ -245,7 +230,7 @@ export default function FileTreeBrowser({ onFileSelect }: FileTreeBrowserProps =
         );
     }
 
-    if (isLoading) {
+    if (rootQuery.isLoading) {
         return (
             <div className="h-full flex items-center justify-center">
                 <div className="flex items-center gap-2 text-muted-foreground">
@@ -256,7 +241,7 @@ export default function FileTreeBrowser({ onFileSelect }: FileTreeBrowserProps =
         );
     }
 
-    if (error) {
+    if (rootQuery.error) {
         return (
             <div className="h-full flex items-center justify-center">
                 <div className="flex items-center gap-2 text-red-500">
@@ -267,18 +252,29 @@ export default function FileTreeBrowser({ onFileSelect }: FileTreeBrowserProps =
         );
     }
 
+    const filteredNodes = filterText ? filterEntries(flattenedNodes) : flattenedNodes;
+
     return (
         <div className="h-full overflow-auto" onClick={handleContainerClick}>
             <div className="p-2 border-b">
-                <h3 className="font-medium text-sm">Files</h3>
+                <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-medium text-sm">Files</h3>
+                </div>
+                <input
+                    type="text"
+                    placeholder="Filter files..."
+                    value={filterText}
+                    onChange={(e) => setFilterText(e.target.value)}
+                    className="w-full px-2 py-1 text-sm border rounded"
+                />
             </div>
             <div className="py-2">
-                {flattenedNodes.length === 0 ? (
+                {filteredNodes.length === 0 ? (
                     <div className="p-4 text-center text-muted-foreground text-sm">
-                        No files found
+                        {filterText ? 'No matching files' : 'No files found'}
                     </div>
                 ) : (
-                    flattenedNodes.map((node, index) => renderTreeNode(node, index))
+                    filteredNodes.map((node, index) => renderTreeNode(node, index))
                 )}
             </div>
         </div>

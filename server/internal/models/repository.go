@@ -178,10 +178,21 @@ type DiffLineTokenized struct {
 	NewNum int     `json:"newNum,omitempty"`
 }
 
+// DiffBlock - a group of consecutive lines of the same type
+type DiffBlock struct {
+	Type      string              `json:"type"`      // "added" | "deleted" | "context"
+	Lines     []DiffLineTokenized `json:"lines"`     // all lines in this block
+	StartOld  int                 `json:"startOld"`  // first old line number (0 if N/A)
+	EndOld    int                 `json:"endOld"`    // last old line number (0 if N/A)
+	StartNew  int                 `json:"startNew"`  // first new line number (0 if N/A)
+	EndNew    int                 `json:"endNew"`    // last new line number (0 if N/A)
+	Collapsed bool                `json:"collapsed"` // true if context block >= 6 lines
+}
+
 // DiffHunkTokenized - contiguous section of changed lines
 type DiffHunkTokenized struct {
-	Header string            `json:"header"` // "@@ -14,8 +14,10 @@"
-	Lines  []DiffLineTokenized `json:"lines"`
+	Header string      `json:"header"` // "@@ -14,8 +14,10 @@"
+	Blocks []DiffBlock `json:"blocks"` // grouped lines
 }
 
 // TokenizedDiff - complete tokenized diff for a single file

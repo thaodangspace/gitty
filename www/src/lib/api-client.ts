@@ -216,7 +216,7 @@ class ApiClient {
 
     async getFileDiff(id: string, filePath: string): Promise<string> {
         const encodedPath = encodeURIComponent(filePath);
-        const response = await fetch(`${API_BASE_URL}/repos/${id}/diff/${encodedPath}`);
+        const response = await fetch(`${API_BASE_URL}/api/repos/${id}/diff/${encodedPath}`);
         if (!response.ok) {
             throw new ApiError({
                 message: `Failed to fetch diff: ${response.statusText}`,

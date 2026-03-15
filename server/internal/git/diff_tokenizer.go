@@ -259,6 +259,52 @@ func tokenizeFullSource(lexer chroma.Lexer, lines []string) [][]models.Token {
 	return result
 }
 
+// ─── BLOCK ASSEMBLY HELPERS ───
+
+const collapseThreshold = 6
+
+// flushBlock appends the current block to the hunk and handles collapse logic.
+// Returns nil to clear the block pointer.
+func flushBlock(block *models.DiffBlock, hunk *models.DiffHunkTokenized) *models.DiffBlock {
+	if block == nil || len(block.Lines) == 0 {
+		return nil
+	}
+	// Auto-collapse context blocks >= 6 lines
+	if block.Type == "context" && len(block.Lines) >= collapseThreshold {
+		block.Collapsed = true
+	}
+	hunk.Blocks = append(hunk.Blocks, *block)
+	return nil
+}
+
+// newBlock creates a new block from a parsed diff line.
+func newBlock(dl rawDiffLine, tokens []models.Token) *models.DiffBlock {
+	return &models.DiffBlock{
+		Type:     dl.lineType,
+		Lines:    []models.DiffLineTokenized{{Type: dl.lineType, Tokens: tokens, OldNum: dl.oldNum, NewNum: dl.newNum}},
+		StartOld: dl.oldNum,
+		EndOld:   dl.oldNum,
+		StartNew: dl.newNum,
+		EndNew:   dl.newNum,
+	}
+}
+
+// appendToBlock adds a line to an existing block and updates line number ranges.
+func appendToBlock(block *models.DiffBlock, dl rawDiffLine, tokens []models.Token) {
+	block.Lines = append(block.Lines, models.DiffLineTokenized{
+		Type:   dl.lineType,
+		Tokens: tokens,
+		OldNum: dl.oldNum,
+		NewNum: dl.newNum,
+	})
+	if dl.oldNum > 0 {
+		block.EndOld = dl.oldNum
+	}
+	if dl.newNum > 0 {
+		block.EndNew = dl.newNum
+	}
+}
+
 // ─── PARSE UNIFIED DIFF INTO HUNKS ───
 
 type rawDiffLine struct {
@@ -295,11 +341,12 @@ func parseDiffContent(diffText string) ([]rawDiffLine, string) {
 				content:  line,
 			})
 			// Extract line numbers
-			fmt.Sscanf(line, "@@ -%d", &oldLine)
-			fmt.Sscanf(line, "@@ -%*d,%*d +%d", &newLine)
-			// Try alternate formats
+			// Go's Sscanf doesn't support %*d (discard), so we parse with dummy variables
+			var oldCount, newCount int
+			fmt.Sscanf(line, "@@ -%d,%d +%d,%d", &oldLine, &oldCount, &newLine, &newCount)
+			// Handle alternate format without counts: @@ -a +b @@
 			if newLine == 0 {
-				fmt.Sscanf(line, "@@ -%*d +%d", &newLine)
+				fmt.Sscanf(line, "@@ -%d +%d", &oldLine, &newLine)
 			}
 			continue
 		}
@@ -417,51 +464,59 @@ func (s *Service) TokenizeDiff(diffText string, filename string) *models.Tokeniz
 		tokenMap[idx] = newTokenized[i]
 	}
 
-	// Build the output lines
+	// Build the output with block grouping
 	result := &models.TokenizedDiff{
 		Filename: filename,
 		Hunks:    []models.DiffHunkTokenized{},
 	}
 
 	var currentHunk *models.DiffHunkTokenized
+	var currentBlock *models.DiffBlock
 	totalAdd := 0
 	totalDel := 0
 
 	for i, dl := range parsed {
 		if dl.lineType == "header" {
-			// Start a new hunk
+			// Flush current block and hunk
+			currentBlock = flushBlock(currentBlock, currentHunk)
 			if currentHunk != nil {
 				result.Hunks = append(result.Hunks, *currentHunk)
 			}
+			// Start new hunk
 			currentHunk = &models.DiffHunkTokenized{
 				Header: dl.content,
-				Lines:  []models.DiffLineTokenized{},
+				Blocks: []models.DiffBlock{},
 			}
+			currentBlock = nil
 			continue
 		}
 
-		// If no hunk started yet (shouldn't happen with valid diffs), create one
+		// Create hunk if needed (shouldn't happen with valid diffs)
 		if currentHunk == nil {
 			currentHunk = &models.DiffHunkTokenized{
 				Header: "@@ @@",
-				Lines:  []models.DiffLineTokenized{},
+				Blocks: []models.DiffBlock{},
 			}
 		}
 
+		// Get tokens for this line
 		tokens := tokenMap[i]
 		if tokens == nil {
 			tokens = []models.Token{{Text: dl.content, Color: defaultColor}}
 		}
 
-		diffLine := models.DiffLineTokenized{
-			Type:   dl.lineType,
-			Tokens: tokens,
-			OldNum: dl.oldNum,
-			NewNum: dl.newNum,
+		// Handle block assembly
+		if currentBlock == nil {
+			currentBlock = newBlock(dl, tokens)
+		} else if currentBlock.Type == dl.lineType {
+			appendToBlock(currentBlock, dl, tokens)
+		} else {
+			// Type changed - flush and start new block
+			currentBlock = flushBlock(currentBlock, currentHunk)
+			currentBlock = newBlock(dl, tokens)
 		}
 
-		currentHunk.Lines = append(currentHunk.Lines, diffLine)
-
+		// Count additions/deletions
 		switch dl.lineType {
 		case "added":
 			totalAdd++
@@ -470,6 +525,8 @@ func (s *Service) TokenizeDiff(diffText string, filename string) *models.Tokeniz
 		}
 	}
 
+	// Flush remaining block and hunk
+	currentBlock = flushBlock(currentBlock, currentHunk)
 	if currentHunk != nil {
 		result.Hunks = append(result.Hunks, *currentHunk)
 	}

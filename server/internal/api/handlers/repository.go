@@ -365,14 +365,19 @@ func (h *RepositoryHandler) GetFileTree(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	files, err := h.gitService.GetFileTree(repo.Path)
+	// Parse query parameters
+	path := r.URL.Query().Get("path")
+	offset := parseQueryInt(r, "offset", 0)
+	limit := parseQueryInt(r, "limit", 500)
+
+	listing, err := h.gitService.BrowseDirectory(repo.Path, path, offset, limit)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get file tree: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to browse directory: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(files)
+	json.NewEncoder(w).Encode(listing)
 }
 
 func (h *RepositoryHandler) GetFileContent(w http.ResponseWriter, r *http.Request) {
@@ -825,4 +830,17 @@ func (h *RepositoryHandler) HandleTokenizedCommitDiff(w http.ResponseWriter, r *
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(tokenizedDiff)
+}
+
+// parseQueryInt parses an integer from query string with a default value
+func parseQueryInt(r *http.Request, key string, defaultValue int) int {
+	str := r.URL.Query().Get(key)
+	if str == "" {
+		return defaultValue
+	}
+	val, err := strconv.Atoi(str)
+	if err != nil {
+		return defaultValue
+	}
+	return val
 }

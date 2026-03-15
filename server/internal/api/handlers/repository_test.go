@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"gitweb/server/internal/git"
 	"gitweb/server/internal/models"
 	"github.com/go-chi/chi/v5"
-	"context"
 )
 
 // Helper function to create a properly initialized test repository
@@ -80,7 +81,7 @@ func TestNewRepositoryHandler(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 	if handler == nil {
 		t.Fatal("NewRepositoryHandler returned nil")
 	}
@@ -99,7 +100,7 @@ func TestNewRepositoryHandler(t *testing.T) {
 }
 
 func TestIsGitRepository(t *testing.T) {
-	handler := NewRepositoryHandler("")
+	handler := NewRepositoryHandler("", nil)
 
 	tempDir, err := os.MkdirTemp("", "handler_test")
 	if err != nil {
@@ -132,7 +133,7 @@ func TestListRepositories(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -192,7 +193,7 @@ func TestCreateRepository(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 
 	// Test creating a repository
 	createReq := models.CreateRepositoryRequest{
@@ -238,7 +239,7 @@ func TestCreateRepositoryInvalidRequest(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 
 	// Test with empty name
 	createReq := models.CreateRepositoryRequest{
@@ -270,7 +271,7 @@ func TestGetRepository(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -331,7 +332,7 @@ func TestGetRepositoryNotFound(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 
 	// Create HTTP request with non-existent repository ID
 	req := httptest.NewRequest("GET", "/repositories/non-existent", nil)
@@ -358,7 +359,7 @@ func TestDeleteRepository(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -413,7 +414,7 @@ func TestGetRepositoryStatus(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 
 	// Create a properly initialized test repository
 	_, err = createTestRepository(handler, "test-repo")
@@ -457,7 +458,7 @@ func TestGetCommitHistory(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -520,7 +521,7 @@ func TestGetBranches(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -583,7 +584,7 @@ func TestCreateCommit(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -657,7 +658,7 @@ func TestCreateBranch(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -721,7 +722,7 @@ func TestSwitchBranch(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -785,7 +786,7 @@ func TestGetFileTree(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -852,15 +853,15 @@ func TestGetFileTree(t *testing.T) {
 	}
 
 	// Parse response
-	var files []models.FileInfo
-	err = json.Unmarshal(w.Body.Bytes(), &files)
+	var listing models.RepoDirectoryListing
+	err = json.Unmarshal(w.Body.Bytes(), &listing)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Should have at least the test files
-	if len(files) < len(testFiles) {
-		t.Errorf("Expected at least %d files, got %d", len(testFiles), len(files))
+	// Should have at least the test files/directories
+	if len(listing.Entries) < len(testFiles) {
+		t.Errorf("Expected at least %d entries, got %d", len(testFiles), len(listing.Entries))
 	}
 }
 
@@ -871,7 +872,7 @@ func TestGetFileContent(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -936,7 +937,7 @@ func TestSaveFileContent(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -1014,7 +1015,7 @@ func TestStageFile(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -1085,7 +1086,7 @@ func TestUnstageFile(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir)
+	handler := NewRepositoryHandler(tempDir, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -1146,5 +1147,93 @@ func TestUnstageFile(t *testing.T) {
 	// Check response
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+}
+
+func TestGetFileTree_QueryParams(t *testing.T) {
+	// Setup handler with a test repository
+	tempDir, err := os.MkdirTemp("", "git_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Initialize git repo
+	gitService := git.NewService()
+	_, err = gitService.InitRepository(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create test structure
+	os.MkdirAll(filepath.Join(tempDir, "src", "components"), 0755)
+	os.WriteFile(filepath.Join(tempDir, "src", "index.ts"), []byte("test"), 0644)
+	os.WriteFile(filepath.Join(tempDir, "README.md"), []byte("readme"), 0644)
+
+	// Create handler
+	handler := NewRepositoryHandler(tempDir, nil)
+
+	// Add repository to handler
+	handler.repositories["test-repo"] = &models.Repository{
+		ID:        "test-repo",
+		Name:      "test-repo",
+		Path:      tempDir,
+		IsLocal:   true,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	// Use chi router for URL param extraction
+	r := chi.NewRouter()
+	r.Get("/repos/{id}/files", handler.GetFileTree)
+
+	// Test root directory
+	req := httptest.NewRequest("GET", "/repos/test-repo/files", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var listing models.RepoDirectoryListing
+	json.Unmarshal(w.Body.Bytes(), &listing)
+
+	// Root should have README.md and src/
+	if len(listing.Entries) < 2 {
+		t.Errorf("Expected at least 2 entries in root, got %d", len(listing.Entries))
+	}
+
+	// Test subdirectory
+	req = httptest.NewRequest("GET", "/repos/test-repo/files?path=src", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	json.Unmarshal(w.Body.Bytes(), &listing)
+
+	if listing.Path != "src" {
+		t.Errorf("Expected path 'src', got %s", listing.Path)
+	}
+
+	// Test pagination
+	req = httptest.NewRequest("GET", "/repos/test-repo/files?offset=0&limit=1", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	json.Unmarshal(w.Body.Bytes(), &listing)
+
+	if len(listing.Entries) > 1 {
+		t.Errorf("Expected at most 1 entry with limit=1, got %d", len(listing.Entries))
+	}
+	if !listing.HasMore || listing.TotalCount < 2 {
+		t.Errorf("Expected has_more=true with total_count >= 2, got has_more=%v, total_count=%d", listing.HasMore, listing.TotalCount)
 	}
 }
