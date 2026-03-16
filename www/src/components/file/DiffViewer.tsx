@@ -2,9 +2,8 @@ import { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { apiClient } from '../../lib/api-client';
-import { PatchDiff } from '@pierre/diffs/react';
-import { useAtom } from 'jotai';
-import { themeAtom } from '@/store/atoms/ui-atoms';
+import TokenizedDiffRenderer from './TokenizedDiffRenderer';
+import type { TokenizedDiff } from '../../types/api';
 
 interface DiffViewerProps {
     repositoryId: string;
@@ -14,18 +13,17 @@ interface DiffViewerProps {
 }
 
 export default function DiffViewer({ repositoryId, filePath, fileName, onClose }: DiffViewerProps) {
-    const [diffText, setDiffText] = useState<string>('');
+    const [diff, setDiff] = useState<TokenizedDiff | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [theme] = useAtom(themeAtom);
 
     useEffect(() => {
         const fetchDiff = async () => {
             try {
                 setIsLoading(true);
                 setError(null);
-                const diffContent = await apiClient.getFileDiff(repositoryId, filePath);
-                setDiffText(diffContent);
+                const diffContent = await apiClient.getTokenizedFileDiff(repositoryId, filePath);
+                setDiff(diffContent);
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Failed to load diff');
             } finally {
@@ -35,16 +33,6 @@ export default function DiffViewer({ repositoryId, filePath, fileName, onClose }
 
         fetchDiff();
     }, [repositoryId, filePath]);
-
-    // Calculate the actual theme mode for PatchDiff
-    const getThemeMode = (): 'dark' | 'light' => {
-        if (theme === 'system') {
-            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        }
-        return theme;
-    };
-
-    const themeMode = getThemeMode();
 
     return (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
@@ -74,23 +62,13 @@ export default function DiffViewer({ repositoryId, filePath, fileName, onClose }
                                 <p className="text-sm text-muted-foreground dark:text-gray-400">{error}</p>
                             </div>
                         </div>
-                    ) : !diffText ? (
+                    ) : !diff ? (
                         <div className="flex items-center justify-center h-48">
                             <p className="text-muted-foreground dark:text-gray-400">No changes to display</p>
                         </div>
                     ) : (
-                        <div className="diff-view-container p-4" key={themeMode}>
-                            <PatchDiff
-                                patch={diffText}
-                                options={{
-                                    diffStyle: 'unified',
-                                    theme: {
-                                        dark: 'github-dark',
-                                        light: 'github-light',
-                                    },
-                                    themeMode: themeMode,
-                                }}
-                            />
+                        <div className="diff-view-container p-4">
+                            <TokenizedDiffRenderer diff={diff} />
                         </div>
                     )}
                 </div>
