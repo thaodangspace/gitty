@@ -197,10 +197,13 @@ type DiffHunkTokenized struct {
 
 // TokenizedDiff - complete tokenized diff for a single file
 type TokenizedDiff struct {
-	Filename  string            `json:"filename"`
-	Hunks     []DiffHunkTokenized `json:"hunks"`
-	Additions int               `json:"additions"`
-	Deletions int               `json:"deletions"`
+	Filename   string              `json:"filename"`
+	Hunks      []DiffHunkTokenized `json:"hunks"`
+	Additions  int                 `json:"additions"`
+	Deletions  int                 `json:"deletions"`
+	HasMore    bool                `json:"has_more"`
+	NextCursor int                 `json:"next_cursor,omitempty"`
+	TotalHunks int                 `json:"total_hunks"`
 }
 
 // TokenizedFileDiff - wraps tokenized diff with file metadata

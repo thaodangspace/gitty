@@ -61,6 +61,8 @@ const mockDiff: TokenizedDiff = {
   ],
   additions: 1,
   deletions: 1,
+  has_more: false,
+  total_hunks: 1,
 };
 
 describe('TokenizedDiffRenderer', () => {
@@ -70,6 +72,8 @@ describe('TokenizedDiffRenderer', () => {
       hunks: [],
       additions: 0,
       deletions: 0,
+      has_more: false,
+      total_hunks: 0,
     };
 
     render(<TokenizedDiffRenderer diff={emptyDiff} />);
@@ -94,10 +98,6 @@ describe('TokenizedDiffRenderer', () => {
 
   it('applies correct background colors for line types', () => {
     render(<TokenizedDiffRenderer diff={mockDiff} />);
-
-    // Find the line containers by their background color classes
-    const addedLine = screen.getByText('const y = 2;').closest('.flex.bg-green-100, .flex:has(.text-green-600)');
-    const deletedLine = screen.getByText('const z = 3;').closest('.flex.bg-red-100, .flex:has(.text-red-600)');
 
     // Alternative: check parent elements for the background color class
     const allFlexDivs = document.querySelectorAll('.flex');
@@ -140,6 +140,8 @@ describe('TokenizedDiffRenderer', () => {
       ],
       additions: 0,
       deletions: 0,
+      has_more: false,
+      total_hunks: 1,
     };
 
     render(<TokenizedDiffRenderer diff={diffWithEmptyTokens} />);
@@ -177,6 +179,8 @@ describe('TokenizedDiffRenderer', () => {
       ],
       additions: 1,
       deletions: 0,
+      has_more: false,
+      total_hunks: 1,
     };
 
     render(<TokenizedDiffRenderer diff={diffWithZeroLineNum} />);
@@ -211,6 +215,8 @@ describe('TokenizedDiffRenderer', () => {
       ],
       additions: 0,
       deletions: 0,
+      has_more: false,
+      total_hunks: 1,
     };
 
     render(<TokenizedDiffRenderer diff={diffWithCollapsed} />);

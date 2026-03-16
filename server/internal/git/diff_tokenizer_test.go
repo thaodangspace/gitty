@@ -125,7 +125,7 @@ index 1234567..abcdefg 100644
 +const y = 3;
  const z = 4;`
 
-	result := service.TokenizeDiff(diff, "test.js")
+	result := service.TokenizeDiff(diff, "test.js", 0, 50)
 
 	if len(result.Hunks) == 0 {
 		t.Fatal("Expected at least one hunk")
@@ -151,7 +151,7 @@ index 1234567..abcdefg 100644
 +const y = 2;
 +const z = 3;`
 
-	result := service.TokenizeDiff(diff, "test.js")
+	result := service.TokenizeDiff(diff, "test.js", 0, 50)
 
 	if len(result.Hunks) == 0 {
 		t.Fatal("Expected at least one hunk")
@@ -188,7 +188,7 @@ index 1234567..abcdefg 100644
  line5
  line6`
 
-	result := service.TokenizeDiff(diff, "test.js")
+	result := service.TokenizeDiff(diff, "test.js", 0, 50)
 
 	if len(result.Hunks) == 0 {
 		t.Fatal("Expected at least one hunk")
@@ -218,7 +218,7 @@ index 1234567..abcdefg 100644
 +const y = 2;
 +const z = 3;`
 
-	result := service.TokenizeDiff(diff, "test.js")
+	result := service.TokenizeDiff(diff, "test.js", 0, 50)
 
 	hunk := result.Hunks[0]
 	addedBlock := hunk.Blocks[1] // Second block should be added
@@ -263,7 +263,7 @@ index 1234567..abcdefg 100644
 +const b = 2;
  const c = 3;`
 
-	result := service.TokenizeDiff(diff, "test.js")
+	result := service.TokenizeDiff(diff, "test.js", 0, 50)
 
 	if len(result.Hunks) != 2 {
 		t.Fatalf("Expected 2 hunks, got %d", len(result.Hunks))
@@ -306,7 +306,7 @@ index 1234567..abcdefg 100644
 
  export function App() {`
 
-	result := service.TokenizeDiff(diff, "app.ts")
+	result := service.TokenizeDiff(diff, "app.ts", 0, 50)
 
 	// Verify overall structure
 	if len(result.Hunks) != 1 {

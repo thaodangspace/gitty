@@ -771,7 +771,7 @@ func (h *RepositoryHandler) GetGitConfig(w http.ResponseWriter, r *http.Request)
 }
 
 // HandleTokenizedFileDiff returns a tokenized (syntax-highlighted) diff for a single file
-// GET /api/repos/{id}/diff/tokenized/*?staged=<bool>
+// GET /api/repos/{id}/diff/tokenized/*?staged=<bool>&cursor=<int>&limit=<int>
 func (h *RepositoryHandler) HandleTokenizedFileDiff(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
@@ -794,8 +794,12 @@ func (h *RepositoryHandler) HandleTokenizedFileDiff(w http.ResponseWriter, r *ht
 	}
 
 	staged := r.URL.Query().Get("staged") == "true"
+	
+	// Parse pagination args
+	cursor := parseQueryInt(r, "cursor", 0)
+	limit := parseQueryInt(r, "limit", 50)
 
-	tokenizedDiff, err := h.gitService.TokenizeDiffFromPatch(repo.Path, decodedPath, staged)
+	tokenizedDiff, err := h.gitService.TokenizeDiffFromPatch(repo.Path, decodedPath, staged, cursor, limit)
 	if err != nil {
 		http.Error(w, "Failed to get tokenized diff: "+err.Error(), http.StatusInternalServerError)
 		return

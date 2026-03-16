@@ -57,7 +57,7 @@ interface DiffBlockProps {
   theme: 'light' | 'dark' | 'system';
 }
 
-function DiffBlock({ block, theme }: DiffBlockProps) {
+function DiffBlock({ block }: DiffBlockProps) {
   const [isExpanded, setIsExpanded] = useState(!block.collapsed);
 
   if (block.collapsed && !isExpanded) {

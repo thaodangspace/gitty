@@ -182,4 +182,7 @@ export interface TokenizedDiff {
   hunks: DiffHunkTokenized[];
   additions: number;
   deletions: number;
+  has_more: boolean;
+  next_cursor?: number;
+  total_hunks: number;
 }

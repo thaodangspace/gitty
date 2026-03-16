@@ -3,8 +3,7 @@ import { useAtom } from 'jotai';
 import { selectedRepositoryAtom } from '@/store/atoms';
 import { useCommitHistory } from '@/store/queries';
 import { format } from 'date-fns';
-import { GitBranch, GitCommit, User, Calendar, Hash, GitMerge } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { GitBranch, User, Calendar, Hash, GitMerge } from 'lucide-react';
 import CommitDetailsDialog from './CommitDetailsDialog';
 
 interface CommitNode {
@@ -49,9 +48,6 @@ export default function CommitTree() {
       return { nodes: [], branches: [] };
     }
 
-    // Create a map of commits for easy lookup
-    const commitMap = new Map(commits.map(c => [c.hash, c]));
-    
     // Build a graph of parent-child relationships
     const children = new Map<string, string[]>();
     commits.forEach(commit => {
@@ -73,7 +69,6 @@ export default function CommitTree() {
     commits.forEach((commit, index) => {
       const childrenHashes = children.get(commit.hash) || [];
       const hasMultipleChildren = childrenHashes.length > 1;
-      const isSingleParent = !commit.parent_hash || (commitMap.get(commit.parent_hash)?.parent_hash);
       
       // If this commit doesn't have a branch assignment yet
       if (!branchAssignments.has(commit.hash)) {

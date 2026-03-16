@@ -55,9 +55,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
     }, [theme, isInitialized]);
 
-    const updateTheme = (newTheme: Theme) => {
-        setTheme(newTheme);
-    };
+
 
     if (!isInitialized) {
         return <>{children}</>;

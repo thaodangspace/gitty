@@ -414,7 +414,11 @@ func parseDiffContent(diffText string) ([]rawDiffLine, string) {
 
 // TokenizeDiff takes a unified diff string and a filename, and returns a
 // fully tokenized diff ready for the RN client to render.
-func (s *Service) TokenizeDiff(diffText string, filename string) *models.TokenizedDiff {
+func (s *Service) TokenizeDiff(diffText string, filename string, cursor int, limit int) *models.TokenizedDiff {
+	if limit <= 0 {
+		limit = 50 // Default limit
+	}
+
 	parsed, detectedFile := parseDiffContent(diffText)
 
 	// Use provided filename, fallback to detected
@@ -470,6 +474,7 @@ func (s *Service) TokenizeDiff(diffText string, filename string) *models.Tokeniz
 		Hunks:    []models.DiffHunkTokenized{},
 	}
 
+	var allHunks []models.DiffHunkTokenized
 	var currentHunk *models.DiffHunkTokenized
 	var currentBlock *models.DiffBlock
 	totalAdd := 0
@@ -480,7 +485,7 @@ func (s *Service) TokenizeDiff(diffText string, filename string) *models.Tokeniz
 			// Flush current block and hunk
 			currentBlock = flushBlock(currentBlock, currentHunk)
 			if currentHunk != nil {
-				result.Hunks = append(result.Hunks, *currentHunk)
+				allHunks = append(allHunks, *currentHunk)
 			}
 			// Start new hunk
 			currentHunk = &models.DiffHunkTokenized{
@@ -528,18 +533,43 @@ func (s *Service) TokenizeDiff(diffText string, filename string) *models.Tokeniz
 	// Flush remaining block and hunk
 	currentBlock = flushBlock(currentBlock, currentHunk)
 	if currentHunk != nil {
-		result.Hunks = append(result.Hunks, *currentHunk)
+		allHunks = append(allHunks, *currentHunk)
 	}
 
+	result.TotalHunks = len(allHunks)
 	result.Additions = totalAdd
 	result.Deletions = totalDel
+
+	// Apply pagination on hunks
+	startIdx := cursor
+	if startIdx < 0 {
+		startIdx = 0
+	}
+	if startIdx >= len(allHunks) {
+		// Out of bounds, return empty hunks
+		result.HasMore = false
+		result.NextCursor = 0
+		return result
+	}
+
+	endIdx := startIdx + limit
+	if endIdx >= len(allHunks) {
+		endIdx = len(allHunks)
+		result.HasMore = false
+		result.NextCursor = 0
+	} else {
+		result.HasMore = true
+		result.NextCursor = endIdx
+	}
+
+	result.Hunks = allHunks[startIdx:endIdx]
 
 	return result
 }
 
 // TokenizeDiffFromPatch is a convenience method that works with the existing
 // GetFileDiff / GetStagedDiff output.
-func (s *Service) TokenizeDiffFromPatch(repoPath, filePath string, staged bool) (*models.TokenizedDiff, error) {
+func (s *Service) TokenizeDiffFromPatch(repoPath, filePath string, staged bool, cursor int, limit int) (*models.TokenizedDiff, error) {
 	var diffText string
 	var err error
 
@@ -552,7 +582,7 @@ func (s *Service) TokenizeDiffFromPatch(repoPath, filePath string, staged bool) 
 		return nil, err
 	}
 
-	return s.TokenizeDiff(diffText, filePath), nil
+	return s.TokenizeDiff(diffText, filePath, cursor, limit), nil
 }
 
 // TokenizeCommitDiff tokenizes all file diffs in a commit detail.
@@ -572,7 +602,7 @@ func (s *Service) TokenizeCommitDiff(repoPath, commitHash string) (*models.Token
 	}
 
 	for _, change := range detail.Changes {
-		tokenized := s.TokenizeDiff(change.Patch, change.Path)
+		tokenized := s.TokenizeDiff(change.Patch, change.Path, 0, 9999) // don't paginate commit diff files for now
 		result.Files = append(result.Files, models.TokenizedFileDiff{
 			Path:       change.Path,
 			ChangeType: change.ChangeType,

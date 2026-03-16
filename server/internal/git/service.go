@@ -927,6 +927,9 @@ func (s *Service) GetFileDiff(repoPath, filePath string) (string, error) {
 
 		return s.generateTextDiff(filePath, oldContent, ""), nil
 
+	case git.Unmodified:
+		return "", nil
+
 	default:
 		return "", fmt.Errorf("unsupported file status: %v", fileStatus.Worktree)
 	}

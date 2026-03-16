@@ -250,14 +250,46 @@ class ApiClient {
     id: string,
     filePath: string,
     staged: boolean = false,
+    cursor?: number,
+    limit?: number,
   ): Promise<TokenizedDiff> {
     const encodedPath = encodeURIComponent(filePath);
-    const url = `/repos/${id}/diff/tokenized/${encodedPath}?staged=${staged}`;
+    let url = `/repos/${id}/diff/tokenized/${encodedPath}?staged=${staged}`;
+    if (cursor !== undefined) {
+      url += `&cursor=${cursor}`;
+    }
+    if (limit !== undefined) {
+      url += `&limit=${limit}`;
+    }
     return this.request<TokenizedDiff>(url);
   }
 
   // Filesystem browsing
   async browseDirectory(path?: string): Promise<DirectoryListing> {
+    const url = path
+      ? `/filesystem/browse?path=${encodeURIComponent(path)}`
+      : "/filesystem/browse";
+    return this.request<DirectoryListing>(url);
+  }
+
+  async getVolumeRoots(): Promise<{ roots: DirectoryEntry[] }> {
+    return this.request<{ roots: DirectoryEntry[] }>("/filesystem/roots");
+  }
+
+  async generateCommitMessage(
+    id: string,
+  ): Promise<GenerateCommitMessageResponse> {
+    return this.request<GenerateCommitMessageResponse>(
+      `/repos/${id}/generate-commit-message`,
+      {
+        method: "POST",
+      },
+    );
+  }
+
+  async getGitConfig(id: string): Promise<GitConfig> {
+    return this.request<GitConfig>(`/repos/${id}/config/git`);
+  }
 }
 
 // Create API client instance

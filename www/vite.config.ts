@@ -4,6 +4,7 @@ import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // @ts-expect-error type mismatch with vitest
   plugins: [react()],
   resolve: {
     alias: {

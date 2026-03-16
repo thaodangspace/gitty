@@ -17,7 +17,7 @@ import {
     MobileDialogContent
 } from '@/components/ui/dialog';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Drawer, DrawerTrigger } from '@/components/ui/drawer';
+import { Drawer } from '@/components/ui/drawer';
 import CreateBranchDialog from './CreateBranchDialog';
 
 export default function BranchList() {
@@ -32,7 +32,7 @@ export default function BranchList() {
     // Vim navigation
     const [vimEnabled] = useAtom(vimModeEnabledAtom);
     const [vimContext, setVimContext] = useAtom(vimFocusContextAtom);
-    const [vimIndex] = useAtom(vimFocusIndexAtom);
+    useAtom(vimFocusIndexAtom);
 
     const otherBranches = branches?.filter(branch => !branch.is_current) || [];
 

@@ -1,5 +1,5 @@
 import { useAtom } from 'jotai';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { selectedRepositoryAtom, selectedFilesAtom } from '@/store/atoms';
 import { themeAtom } from '@/store/atoms/ui-atoms';
 import { useQuery } from '@tanstack/react-query';
@@ -98,7 +98,7 @@ export default function FileViewer() {
         enabled: !!currentRepository?.id && !!selectedFile && isTextFile(selectedFile),
     });
 
-    const [isHighlighting, setIsHighlighting] = useState(false);
+
 
     if (!currentRepository) {
         return (

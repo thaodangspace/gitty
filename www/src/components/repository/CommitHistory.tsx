@@ -28,7 +28,7 @@ export default function CommitHistory() {
     // Vim navigation
     const [vimEnabled] = useAtom(vimModeEnabledAtom);
     const [vimContext, setVimContext] = useAtom(vimFocusContextAtom);
-    const [vimIndex] = useAtom(vimFocusIndexAtom);
+    useAtom(vimFocusIndexAtom);
 
     const { isVimActive, currentIndex, activateContext } = useVimNavigation({
         context: 'commit-list',
