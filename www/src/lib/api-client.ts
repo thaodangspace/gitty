@@ -264,6 +264,29 @@ class ApiClient {
     return this.request<TokenizedDiff>(url);
   }
 
+  async getCommitFileDiff(
+    id: string,
+    commitHash: string,
+    filePath: string,
+    cursor?: number,
+    limit?: number,
+  ): Promise<TokenizedDiff> {
+    const encodedPath = encodeURIComponent(filePath);
+    const encodedHash = encodeURIComponent(commitHash);
+    let url = `/repos/${id}/diff/commit/${encodedHash}/files/${encodedPath}`;
+    const params = new URLSearchParams();
+    if (cursor !== undefined) {
+      params.append("cursor", String(cursor));
+    }
+    if (limit !== undefined) {
+      params.append("limit", String(limit));
+    }
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+    return this.request<TokenizedDiff>(url);
+  }
+
   // Filesystem browsing
   async browseDirectory(path?: string): Promise<DirectoryListing> {
     const url = path
