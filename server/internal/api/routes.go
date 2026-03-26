@@ -57,6 +57,7 @@ func NewRouter(dataPath string, cfg *config.Config, reg *registry.Registry) *chi
 				r.Get("/diff/*", repoHandler.GetFileDiff)
 				r.Get("/diff/tokenized/*", repoHandler.HandleTokenizedFileDiff)
 				r.Get("/diff/commit/tokenized", repoHandler.HandleTokenizedCommitDiff)
+			r.Get("/diff/commit/{hash}/files/*", repoHandler.HandleCommitFileDiff)
 
 				r.Post("/stage/*", repoHandler.StageFile)
 				r.Post("/stage-all", repoHandler.StageAllFiles)
