@@ -1063,3 +1063,13 @@ func TestBrowseDirectory_PathTraversal(t *testing.T) {
 		t.Error("Expected error for path traversal")
 	}
 }
+
+func TestGetCommitFileDiff(t *testing.T) {
+	s := NewService()
+
+	// This test will fail until we implement the method
+	_, err := s.GetCommitFileDiff("/tmp/test-repo", "abc123", "test.go", 0, 50)
+	if err == nil {
+		t.Error("Expected error for non-existent repo, got nil")
+	}
+}

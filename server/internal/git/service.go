@@ -1185,3 +1185,151 @@ func (s *Service) GetGitConfig(repoPath string) (*models.GitConfig, error) {
 		Email: config.User.Email,
 	}, nil
 }
+
+// GetCommitFileDiff returns the diff for a specific file at a specific commit.
+// It compares the file at the commit with its parent (or empty for initial commits).
+func (s *Service) GetCommitFileDiff(repoPath, commitHash, filePath string, cursor, limit int) (*models.TokenizedDiff, error) {
+	repo, err := s.OpenRepository(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Verify commit exists
+	hash := plumbing.NewHash(commitHash)
+	commit, err := repo.CommitObject(hash)
+	if err != nil {
+		return nil, fmt.Errorf("commit not found: %w", err)
+	}
+
+	// Get parent commit (if exists)
+	var parentCommit *object.Commit
+	if len(commit.ParentHashes) > 0 {
+		parentCommit, _ = repo.CommitObject(commit.ParentHashes[0])
+	}
+
+	// Get file content at commit
+	commitTree, err := commit.Tree()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commit tree: %w", err)
+	}
+
+	var newContent string
+	var fileExists bool
+	commitFile, err := commitTree.File(filePath)
+	if err == nil {
+		newContent, err = commitFile.Contents()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read file at commit: %w", err)
+		}
+		fileExists = true
+	}
+
+	// Get file content at parent (if exists)
+	var oldContent string
+	var oldFileExists bool
+	if parentCommit != nil {
+		parentTree, err := parentCommit.Tree()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get parent tree: %w", err)
+		}
+
+		parentFile, err := parentTree.File(filePath)
+		if err == nil {
+			oldContent, err = parentFile.Contents()
+			if err != nil {
+				return nil, fmt.Errorf("failed to read file at parent: %w", err)
+			}
+			oldFileExists = true
+		}
+	}
+
+	// Handle file not found cases
+	if !fileExists && !oldFileExists {
+		return nil, fmt.Errorf("file not found in commit or parent: %s", filePath)
+	}
+
+	// Generate unified diff
+	diffText := s.generateCommitFileDiff(filePath, oldContent, oldFileExists, newContent, fileExists)
+	if diffText == "" {
+		return &models.TokenizedDiff{
+			Filename:   filePath,
+			Hunks:      []models.DiffHunkTokenized{},
+			TotalHunks: 0,
+			Additions:  0,
+			Deletions:  0,
+			HasMore:    false,
+			NextCursor: 0,
+		}, nil
+	}
+
+	// Tokenize and return
+	return s.TokenizeDiff(diffText, filePath, cursor, limit), nil
+}
+
+// generateCommitFileDiff creates a unified diff between two file versions
+func (s *Service) generateCommitFileDiff(filePath, oldContent string, oldExists bool, newContent string, newExists bool) string {
+	// Handle file added (no parent content)
+	if !oldExists && newExists {
+		return s.generateNewFileDiff(filePath, newContent)
+	}
+
+	// Handle file deleted (no new content)
+	if oldExists && !newExists {
+		return s.generateDeletedFileDiff(filePath, oldContent)
+	}
+
+	// Handle modified file
+	if oldContent == newContent {
+		return ""
+	}
+
+	return s.generateTextDiff(filePath, oldContent, newContent)
+}
+
+// generateNewFileDiff creates diff for a new file
+func (s *Service) generateNewFileDiff(filePath, content string) string {
+	var diff strings.Builder
+	diff.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", filePath, filePath))
+	diff.WriteString("new file mode 100644\n")
+	diff.WriteString("index 0000000..0000000\n")
+	diff.WriteString("--- /dev/null\n")
+	diff.WriteString(fmt.Sprintf("+++ b/%s\n", filePath))
+
+	lines := strings.Split(content, "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	if len(lines) > 0 {
+		diff.WriteString(fmt.Sprintf("@@ -0,0 +1,%d @@\n", len(lines)))
+		for _, line := range lines {
+			diff.WriteString("+" + line + "\n")
+		}
+	}
+
+	return diff.String()
+}
+
+// generateDeletedFileDiff creates diff for a deleted file
+func (s *Service) generateDeletedFileDiff(filePath, content string) string {
+	var diff strings.Builder
+	diff.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", filePath, filePath))
+	diff.WriteString("deleted file mode 100644\n")
+	diff.WriteString("index 0000000..0000000\n")
+	diff.WriteString(fmt.Sprintf("--- a/%s\n", filePath))
+	diff.WriteString("+++ /dev/null\n")
+
+	lines := strings.Split(content, "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	if len(lines) > 0 {
+		diff.WriteString(fmt.Sprintf("@@ -1,%d +0,0 @@\n", len(lines)))
+		for _, line := range lines {
+			diff.WriteString("-" + line + "\n")
+		}
+	}
+
+	return diff.String()
+}
