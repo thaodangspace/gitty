@@ -245,6 +245,7 @@ export default function CommitDetailsDialog({
             filePath={selectedDiffFile.path}
             fileName={selectedDiffFile.name}
             onClose={() => setSelectedDiffFile(null)}
+            commitHash={commitHash}
           />
         )}
       </DialogContent>
