@@ -10,9 +10,10 @@ interface DiffViewerProps {
     filePath: string;
     fileName: string;
     onClose: () => void;
+    commitHash?: string;
 }
 
-export default function DiffViewer({ repositoryId, filePath, fileName, onClose }: DiffViewerProps) {
+export default function DiffViewer({ repositoryId, filePath, fileName, onClose, commitHash }: DiffViewerProps) {
     const [diff, setDiff] = useState<TokenizedDiff | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -22,16 +23,21 @@ export default function DiffViewer({ repositoryId, filePath, fileName, onClose }
 
     const loadMore = useCallback(async () => {
         if (!diff?.has_more || diff?.next_cursor === undefined || isLoadingMore) return;
-        
+
         try {
             setIsLoadingMore(true);
-            const nextDiff = await apiClient.getTokenizedFileDiff(repositoryId, filePath, false, diff.next_cursor);
+            let nextDiff: TokenizedDiff;
+            if (commitHash) {
+                nextDiff = await apiClient.getCommitFileDiff(repositoryId, commitHash, filePath, diff.next_cursor);
+            } else {
+                nextDiff = await apiClient.getTokenizedFileDiff(repositoryId, filePath, false, diff.next_cursor);
+            }
             setDiff(prev => {
                 if (!prev) return nextDiff;
                 return {
                     ...prev,
                     hunks: [...prev.hunks, ...nextDiff.hunks],
-                    additions: prev.additions + nextDiff.additions, // note: backend might return total or page additions
+                    additions: prev.additions + nextDiff.additions,
                     deletions: prev.deletions + nextDiff.deletions,
                     has_more: nextDiff.has_more,
                     next_cursor: nextDiff.next_cursor,
@@ -43,14 +49,21 @@ export default function DiffViewer({ repositoryId, filePath, fileName, onClose }
         } finally {
             setIsLoadingMore(false);
         }
-    }, [diff?.has_more, diff?.next_cursor, isLoadingMore, repositoryId, filePath]);
+    }, [diff?.has_more, diff?.next_cursor, isLoadingMore, repositoryId, filePath, commitHash]);
 
     useEffect(() => {
         const fetchInitialDiff = async () => {
             try {
                 setIsLoading(true);
                 setError(null);
-                const diffContent = await apiClient.getTokenizedFileDiff(repositoryId, filePath);
+                let diffContent: TokenizedDiff;
+                if (commitHash) {
+                    // Fetch historical diff for specific commit
+                    diffContent = await apiClient.getCommitFileDiff(repositoryId, commitHash, filePath);
+                } else {
+                    // Fetch working directory diff
+                    diffContent = await apiClient.getTokenizedFileDiff(repositoryId, filePath);
+                }
                 setDiff(diffContent);
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Failed to load diff');
@@ -60,7 +73,7 @@ export default function DiffViewer({ repositoryId, filePath, fileName, onClose }
         };
 
         fetchInitialDiff();
-    }, [repositoryId, filePath]);
+    }, [repositoryId, filePath, commitHash]);
 
     useEffect(() => {
         const option = {
