@@ -2,6 +2,8 @@ package git
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -15,67 +17,67 @@ import (
 
 var darkTheme = map[chroma.TokenType]string{
 	// Keywords
-	chroma.Keyword:            "#C678DD",
-	chroma.KeywordConstant:    "#D19A66",
-	chroma.KeywordDeclaration: "#C678DD",
-	chroma.KeywordNamespace:   "#C678DD",
-	chroma.KeywordType:        "#E5C07B",
-	chroma.KeywordReserved:    "#C678DD",
+	chroma.Keyword:            "#d2a8ff",
+	chroma.KeywordConstant:    "#ffab70",
+	chroma.KeywordDeclaration: "#d2a8ff",
+	chroma.KeywordNamespace:   "#d2a8ff",
+	chroma.KeywordType:        "#ffa657",
+	chroma.KeywordReserved:    "#d2a8ff",
 
 	// Names
-	chroma.Name:              "#E6EDF3",
-	chroma.NameBuiltin:       "#61AFEF",
-	chroma.NameClass:         "#E5C07B",
-	chroma.NameFunction:      "#61AFEF",
-	chroma.NameDecorator:     "#D19A66",
-	chroma.NameException:     "#E5C07B",
-	chroma.NameTag:           "#E06C75",
-	chroma.NameAttribute:     "#D19A66",
-	chroma.NameVariable:      "#E06C75",
-	chroma.NameConstant:      "#D19A66",
-	chroma.NameOther:         "#E6EDF3",
-	chroma.NameProperty:      "#E06C75",
-	chroma.NameEntity:        "#D19A66",
-	chroma.NameLabel:         "#61AFEF",
-	chroma.NameNamespace:     "#E5C07B",
-	chroma.NameBuiltinPseudo: "#E5C07B",
+	chroma.Name:              "#e6edf3",
+	chroma.NameBuiltin:       "#79c0ff",
+	chroma.NameClass:         "#ffa657",
+	chroma.NameFunction:      "#79c0ff",
+	chroma.NameDecorator:     "#ffab70",
+	chroma.NameException:     "#ffa657",
+	chroma.NameTag:           "#f85149",
+	chroma.NameAttribute:     "#ffab70",
+	chroma.NameVariable:      "#f85149",
+	chroma.NameConstant:      "#ffab70",
+	chroma.NameOther:         "#e6edf3",
+	chroma.NameProperty:      "#f85149",
+	chroma.NameEntity:        "#ffab70",
+	chroma.NameLabel:         "#79c0ff",
+	chroma.NameNamespace:     "#ffa657",
+	chroma.NameBuiltinPseudo: "#ffa657",
 
 	// Literals
-	chroma.LiteralString:          "#98C379",
-	chroma.LiteralStringDouble:    "#98C379",
-	chroma.LiteralStringSingle:    "#98C379",
-	chroma.LiteralStringBacktick:  "#98C379",
-	chroma.LiteralStringEscape:    "#56B6C2",
-	chroma.LiteralStringRegex:     "#56B6C2",
-	chroma.LiteralStringInterpol:  "#D19A66",
-	chroma.LiteralNumber:          "#D19A66",
-	chroma.LiteralNumberFloat:     "#D19A66",
-	chroma.LiteralNumberHex:       "#D19A66",
-	chroma.LiteralNumberInteger:   "#D19A66",
-	chroma.LiteralNumberOct:       "#D19A66",
+	chroma.LiteralString:          "#7ee787",
+	chroma.LiteralStringDouble:    "#7ee787",
+	chroma.LiteralStringSingle:    "#7ee787",
+	chroma.LiteralStringBacktick:  "#7ee787",
+	chroma.LiteralStringEscape:    "#76e3ea",
+	chroma.LiteralStringRegex:     "#76e3ea",
+	chroma.LiteralStringInterpol:  "#ffab70",
+	chroma.LiteralNumber:          "#ffab70",
+	chroma.LiteralNumberFloat:     "#ffab70",
+	chroma.LiteralNumberHex:       "#ffab70",
+	chroma.LiteralNumberInteger:   "#ffab70",
+	chroma.LiteralNumberOct:       "#ffab70",
 
 	// Operators
-	chroma.Operator:     "#56B6C2",
-	chroma.OperatorWord: "#C678DD",
-	chroma.Punctuation:  "#ABB2BF",
+	chroma.Operator:     "#76e3ea",
+	chroma.OperatorWord: "#d2a8ff",
+	chroma.Punctuation:  "#8b949e",
 
 	// Comments
-	chroma.Comment:          "#5C6370",
-	chroma.CommentSingle:    "#5C6370",
-	chroma.CommentMultiline: "#5C6370",
-	chroma.CommentHashbang:  "#5C6370",
-	chroma.CommentPreproc:   "#C678DD",
+	chroma.Comment:          "#8b949e",
+	chroma.CommentSingle:    "#8b949e",
+	chroma.CommentMultiline: "#8b949e",
+	chroma.CommentHashbang:  "#8b949e",
+	chroma.CommentPreproc:   "#d2a8ff",
 
 	// Generic (fallback)
-	chroma.GenericEmph:    "#E6EDF3",
-	chroma.GenericStrong:  "#E6EDF3",
-	chroma.GenericHeading: "#61AFEF",
+	chroma.GenericEmph:    "#e6edf3",
+	chroma.GenericStrong:  "#e6edf3",
+	chroma.GenericHeading: "#79c0ff",
 
 	// Text
-	chroma.Text: "#E6EDF3",
+	chroma.Text: "#e6edf3",
 }
 
-const defaultColor = "#E6EDF3"
+const defaultColor = "#e6edf3"
 
 func colorForToken(tokenType chroma.TokenType) string {
 	// Walk up the token type hierarchy to find a matching color
@@ -410,6 +412,113 @@ func parseDiffContent(diffText string) ([]rawDiffLine, string) {
 	return result, filename
 }
 
+// ─── GIT DIFF COMMAND OPTIMIZATION ───
+
+// GetFileDiffUsingGitDiff executes "git diff HEAD <file>" directly using the git CLI.
+// This is faster than using go-git library for large files as it leverages git's
+// optimized diff algorithm and avoids loading full file contents into memory.
+func (s *Service) GetFileDiffUsingGitDiff(repoPath, filePath string) (string, error) {
+	cmd := exec.Command("git", "diff", "HEAD", "--", filePath)
+	cmd.Dir = repoPath
+	output, err := cmd.Output()
+	if err != nil {
+		// Check if it's an exit error (file might be new/untracked)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			// If git diff returns no output but exits with error, file might be new
+			if len(exitErr.Stderr) == 0 || string(exitErr.Stderr) == "" {
+				// Try checking if file exists in working directory
+				fullPath := filepath.Join(repoPath, filePath)
+				if _, statErr := os.Stat(fullPath); statErr == nil {
+					// File exists but git diff returned empty - likely a new untracked file
+					// Fall back to manual diff generation for untracked files
+					return s.getUntrackedFileDiff(repoPath, filePath)
+				}
+			}
+		}
+		return "", fmt.Errorf("git diff failed: %w", err)
+	}
+
+	diffText := string(output)
+	// If diff is empty, check if file exists (might be untracked)
+	if strings.TrimSpace(diffText) == "" {
+		fullPath := filepath.Join(repoPath, filePath)
+		if _, statErr := os.Stat(fullPath); statErr == nil {
+			// File exists but git diff HEAD returned empty
+			// Check if file is untracked (not in git)
+			isTracked := s.isFileTracked(repoPath, filePath)
+			if !isTracked {
+				// Untracked file - generate diff showing all content as additions
+				return s.getUntrackedFileDiff(repoPath, filePath)
+			}
+		}
+		return "", nil
+	}
+	return diffText, nil
+}
+
+// isFileTracked checks if a file is tracked by git using "git ls-files"
+func (s *Service) isFileTracked(repoPath, filePath string) bool {
+	cmd := exec.Command("git", "ls-files", "--error-unmatch", "--", filePath)
+	cmd.Dir = repoPath
+	err := cmd.Run()
+	return err == nil
+}
+
+// GetStagedDiffUsingGitDiff executes "git diff --cached <file>" directly using the git CLI.
+// This gets the diff between the staged content (index) and HEAD.
+func (s *Service) GetStagedDiffUsingGitDiff(repoPath, filePath string) (string, error) {
+	cmd := exec.Command("git", "diff", "--cached", "--", filePath)
+	cmd.Dir = repoPath
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			// Check if it's because file is not staged
+			if len(exitErr.Stderr) > 0 {
+				return "", fmt.Errorf("git diff --cached failed: %s", string(exitErr.Stderr))
+			}
+		}
+		return "", fmt.Errorf("git diff --cached failed: %w", err)
+	}
+
+	diffText := string(output)
+	// If diff is empty, return empty string
+	if strings.TrimSpace(diffText) == "" {
+		return "", nil
+	}
+	return diffText, nil
+}
+
+// getUntrackedFileDiff generates a diff for an untracked/new file.
+// Shows the entire file content as additions.
+func (s *Service) getUntrackedFileDiff(repoPath, filePath string) (string, error) {
+	fullPath := filepath.Join(repoPath, filePath)
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file: %w", err)
+	}
+
+	var diff strings.Builder
+	diff.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", filePath, filePath))
+	diff.WriteString("new file mode 100644\n")
+	diff.WriteString("index 0000000..0000000\n")
+	diff.WriteString("--- /dev/null\n")
+	diff.WriteString(fmt.Sprintf("+++ b/%s\n", filePath))
+
+	lines := strings.Split(string(content), "\n")
+	// Remove trailing empty line if file ends with newline
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if len(lines) > 0 {
+		diff.WriteString(fmt.Sprintf("@@ -0,0 +1,%d @@\n", len(lines)))
+		for _, line := range lines {
+			diff.WriteString("+" + line + "\n")
+		}
+	}
+
+	return diff.String(), nil
+}
+
 // ─── PUBLIC API ───
 
 // TokenizeDiff takes a unified diff string and a filename, and returns a
@@ -567,19 +676,33 @@ func (s *Service) TokenizeDiff(diffText string, filename string, cursor int, lim
 	return result
 }
 
-// TokenizeDiffFromPatch is a convenience method that works with the existing
-// GetFileDiff / GetStagedDiff output.
+// TokenizeDiffFromPatch is a convenience method that gets the diff using optimized
+// git diff commands and returns a fully tokenized diff ready for rendering.
 func (s *Service) TokenizeDiffFromPatch(repoPath, filePath string, staged bool, cursor int, limit int) (*models.TokenizedDiff, error) {
 	var diffText string
 	var err error
 
+	// Use optimized git diff path
 	if staged {
-		diffText, err = s.GetStagedDiff(repoPath, filePath)
+		diffText, err = s.GetStagedDiffUsingGitDiff(repoPath, filePath)
 	} else {
-		diffText, err = s.GetFileDiff(repoPath, filePath)
+		diffText, err = s.GetFileDiffUsingGitDiff(repoPath, filePath)
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	// If no diff, return empty result
+	if diffText == "" {
+		return &models.TokenizedDiff{
+			Filename:  filePath,
+			Hunks:     []models.DiffHunkTokenized{},
+			TotalHunks: 0,
+			Additions: 0,
+			Deletions: 0,
+			HasMore:   false,
+			NextCursor: 0,
+		}, nil
 	}
 
 	return s.TokenizeDiff(diffText, filePath, cursor, limit), nil

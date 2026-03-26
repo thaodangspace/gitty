@@ -96,10 +96,19 @@ interface DiffLineProps {
 }
 
 function DiffLine({ line, type }: DiffLineProps) {
-  const bgColor = {
-    added: 'bg-green-100 dark:bg-green-900/20',
-    deleted: 'bg-red-100 dark:bg-red-900/20',
-    context: 'bg-transparent',
+  const lineStyle = {
+    added: {
+      backgroundColor: 'rgba(46, 160, 67, 0.08)',
+      borderLeft: '3px solid #2ea043',
+    },
+    deleted: {
+      backgroundColor: 'rgba(248, 81, 73, 0.08)',
+      borderLeft: '3px solid #f85149',
+    },
+    context: {
+      backgroundColor: 'transparent',
+      borderLeft: '3px solid transparent',
+    },
   }[type];
 
   const prefix = {
@@ -111,7 +120,7 @@ function DiffLine({ line, type }: DiffLineProps) {
   // Handle empty tokens array
   if (!line.tokens || line.tokens.length === 0) {
     return (
-      <div className={`flex ${bgColor} hover:bg-gray-100 dark:hover:bg-gray-800`}>
+      <div style={lineStyle} className="flex hover:bg-gray-100 dark:hover:bg-gray-800">
         <div className="w-12 text-right pr-2 text-gray-400 select-none">
           {line.oldNum !== undefined ? line.oldNum : '-'}
         </div>
@@ -126,7 +135,7 @@ function DiffLine({ line, type }: DiffLineProps) {
   }
 
   return (
-    <div className={`flex ${bgColor} hover:bg-gray-100 dark:hover:bg-gray-800`}>
+    <div style={lineStyle} className="flex hover:bg-gray-100 dark:hover:bg-gray-800">
       {/* Old line number */}
       <div className="w-12 text-right pr-2 text-gray-400 select-none">
         {line.oldNum !== undefined ? line.oldNum : '-'}

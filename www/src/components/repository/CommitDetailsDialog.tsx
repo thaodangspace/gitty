@@ -75,22 +75,6 @@ export default function CommitDetailsDialog({
     setSelectedDiffFile({ path: filePath, name: fileName });
   };
 
-  const diffTextToHtml = (patch: string) => {
-    return patch
-      .split("\n")
-      .map((line) => {
-        const sign = line[0];
-        const content = line.slice(1);
-        if (sign === "+") {
-          return `<span style="color: #22863a; background-color: #f0fff4;">${sign}${content}</span>`;
-        } else if (sign === "-") {
-          return `<span style="color: #a40e26; background-color: #ffeef0;">${sign}${content}</span>`;
-        }
-        return `<span>${sign}${content}</span>`;
-      })
-      .join("\n");
-  };
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
@@ -244,31 +228,9 @@ export default function CommitDetailsDialog({
                            </Button>
                          </div>
                        )}
-                     </div>
+                      </div>
 
-{change.patch && (
-                       <div className="p-4 text-sm">
-                         <p className="text-muted-foreground mb-2">
-                           Changes:
-                           {change.additions > 0 && (
-                             <span className="text-green-600 ml-2">
-                               +{change.additions}
-                             </span>
-                           )}
-                           {change.deletions > 0 && (
-                             <span className="text-red-600 ml-2">
-                               -{change.deletions}
-                             </span>
-                           )}
-                         </p>
-                         <pre
-                           className="text-xs bg-muted/50 p-2 rounded border overflow-x-auto whitespace-pre-wrap font-mono"
-                           dangerouslySetInnerHTML={{
-                             __html: diffTextToHtml(change.patch),
-                           }}
-                         />
-                       </div>
-                     )}
+{/* File change without inline patch preview - click button to view full diff */}
                   </div>
                 ))}
               </div>

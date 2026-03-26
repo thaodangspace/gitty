@@ -1,6 +1,10 @@
 package git
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"gitweb/server/internal/models"
@@ -326,5 +330,299 @@ index 1234567..abcdefg 100644
 	}
 	if result.Deletions != 4 {
 		t.Errorf("Expected 4 deletions, got %d", result.Deletions)
+	}
+}
+
+// ─── TESTS FOR GIT DIFF OPTIMIZATION ───
+
+func TestGetFileDiffUsingGitDiff_ModifiedFile(t *testing.T) {
+	service := NewService()
+
+	tempDir, err := os.MkdirTemp("", "git_diff_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Initialize repository
+	runGit(t, tempDir, "init")
+	runGit(t, tempDir, "config", "user.email", "test@example.com")
+	runGit(t, tempDir, "config", "user.name", "Test User")
+
+	// Create initial file
+	filePath := "test.txt"
+	initialContent := "Hello, World!\nSecond line\n"
+	err = os.WriteFile(filepath.Join(tempDir, filePath), []byte(initialContent), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Stage and commit
+	runGit(t, tempDir, "add", filePath)
+	runGit(t, tempDir, "commit", "-m", "Initial commit")
+
+	// Modify the file
+	modifiedContent := "Hello, World!\nModified line\nNew third line\n"
+	err = os.WriteFile(filepath.Join(tempDir, filePath), []byte(modifiedContent), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Get diff using git diff
+	diff, err := service.GetFileDiffUsingGitDiff(tempDir, filePath)
+	if err != nil {
+		t.Fatalf("GetFileDiffUsingGitDiff failed: %v", err)
+	}
+
+	if diff == "" {
+		t.Fatal("Expected non-empty diff for modified file")
+	}
+
+	// Verify diff contains expected markers
+	if !strings.Contains(diff, "-Second line") {
+		t.Error("Diff should contain deleted line")
+	}
+	if !strings.Contains(diff, "+Modified line") {
+		t.Error("Diff should contain added line")
+	}
+	if !strings.Contains(diff, "+New third line") {
+		t.Error("Diff should contain new line")
+	}
+}
+
+func TestGetFileDiffUsingGitDiff_NewFile(t *testing.T) {
+	service := NewService()
+
+	tempDir, err := os.MkdirTemp("", "git_diff_new_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Initialize repository
+	runGit(t, tempDir, "init")
+	runGit(t, tempDir, "config", "user.email", "test@example.com")
+	runGit(t, tempDir, "config", "user.name", "Test User")
+
+	// Create initial commit
+	initialFile := "existing.txt"
+	err = os.WriteFile(filepath.Join(tempDir, initialFile), []byte("existing\n"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, tempDir, "add", initialFile)
+	runGit(t, tempDir, "commit", "-m", "Initial commit")
+
+	// Create new untracked file
+	newFile := "new.txt"
+	newContent := "Line 1\nLine 2\nLine 3\n"
+	err = os.WriteFile(filepath.Join(tempDir, newFile), []byte(newContent), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Get diff for new file
+	diff, err := service.GetFileDiffUsingGitDiff(tempDir, newFile)
+	if err != nil {
+		t.Fatalf("GetFileDiffUsingGitDiff failed for new file: %v", err)
+	}
+
+	if diff == "" {
+		t.Fatal("Expected non-empty diff for new file")
+	}
+
+	t.Logf("Diff output: %s", diff)
+
+	// Verify diff indicates new file - use Contains for more flexible matching
+	if !strings.Contains(diff, "new file mode") {
+		t.Error("Diff should indicate new file")
+	}
+	if !strings.Contains(diff, "+Line 1") {
+		t.Error("Diff should contain added lines")
+	}
+}
+
+func TestGetFileDiffUsingGitDiff_NoChanges(t *testing.T) {
+	service := NewService()
+
+	tempDir, err := os.MkdirTemp("", "git_diff_nochange_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Initialize repository
+	runGit(t, tempDir, "init")
+	runGit(t, tempDir, "config", "user.email", "test@example.com")
+	runGit(t, tempDir, "config", "user.name", "Test User")
+
+	// Create and commit file
+	filePath := "test.txt"
+	content := "Hello, World!\n"
+	err = os.WriteFile(filepath.Join(tempDir, filePath), []byte(content), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, tempDir, "add", filePath)
+	runGit(t, tempDir, "commit", "-m", "Initial commit")
+
+	// Get diff (should be empty - no changes)
+	diff, err := service.GetFileDiffUsingGitDiff(tempDir, filePath)
+	if err != nil {
+		t.Fatalf("GetFileDiffUsingGitDiff failed: %v", err)
+	}
+
+	if diff != "" {
+		t.Error("Expected empty diff for unmodified file")
+	}
+}
+
+func TestGetStagedDiffUsingGitDiff_StagedChanges(t *testing.T) {
+	service := NewService()
+
+	tempDir, err := os.MkdirTemp("", "git_staged_diff_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Initialize repository
+	runGit(t, tempDir, "init")
+	runGit(t, tempDir, "config", "user.email", "test@example.com")
+	runGit(t, tempDir, "config", "user.name", "Test User")
+
+	// Create initial file
+	filePath := "test.txt"
+	initialContent := "Hello, World!\n"
+	err = os.WriteFile(filepath.Join(tempDir, filePath), []byte(initialContent), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, tempDir, "add", filePath)
+	runGit(t, tempDir, "commit", "-m", "Initial commit")
+
+	// Modify and stage
+	modifiedContent := "Hello, World!\nStaged change\n"
+	err = os.WriteFile(filepath.Join(tempDir, filePath), []byte(modifiedContent), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, tempDir, "add", filePath)
+
+	// Get staged diff
+	diff, err := service.GetStagedDiffUsingGitDiff(tempDir, filePath)
+	if err != nil {
+		t.Fatalf("GetStagedDiffUsingGitDiff failed: %v", err)
+	}
+
+	if diff == "" {
+		t.Fatal("Expected non-empty staged diff")
+	}
+
+	// Verify diff contains staged changes
+	if !strings.Contains(diff, "+Staged change") {
+		t.Error("Staged diff should contain staged additions")
+	}
+}
+
+func TestGetStagedDiffUsingGitDiff_NoStagedChanges(t *testing.T) {
+	service := NewService()
+
+	tempDir, err := os.MkdirTemp("", "git_staged_empty_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Initialize repository
+	runGit(t, tempDir, "init")
+	runGit(t, tempDir, "config", "user.email", "test@example.com")
+	runGit(t, tempDir, "config", "user.name", "Test User")
+
+	// Create and commit file
+	filePath := "test.txt"
+	content := "Hello, World!\n"
+	err = os.WriteFile(filepath.Join(tempDir, filePath), []byte(content), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, tempDir, "add", filePath)
+	runGit(t, tempDir, "commit", "-m", "Initial commit")
+
+	// Get staged diff (should be empty - nothing staged)
+	diff, err := service.GetStagedDiffUsingGitDiff(tempDir, filePath)
+	if err != nil {
+		t.Fatalf("GetStagedDiffUsingGitDiff failed: %v", err)
+	}
+
+	if diff != "" {
+		t.Error("Expected empty staged diff when nothing is staged")
+	}
+}
+
+func TestTokenizeDiffFromPatch_UsesOptimizedGitDiff(t *testing.T) {
+	service := NewService()
+
+	tempDir, err := os.MkdirTemp("", "git_tokenized_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Initialize repository
+	runGit(t, tempDir, "init")
+	runGit(t, tempDir, "config", "user.email", "test@example.com")
+	runGit(t, tempDir, "config", "user.name", "Test User")
+
+	// Create initial TypeScript file
+	filePath := "test.ts"
+	initialContent := "const x = 1;\nconst y = 2;\n"
+	err = os.WriteFile(filepath.Join(tempDir, filePath), []byte(initialContent), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, tempDir, "add", filePath)
+	runGit(t, tempDir, "commit", "-m", "Initial commit")
+
+	// Modify the file
+	modifiedContent := "const x = 1;\nconst y = 3;\nconst z = 4;\n"
+	err = os.WriteFile(filepath.Join(tempDir, filePath), []byte(modifiedContent), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Tokenize using optimized path
+	result, err := service.TokenizeDiffFromPatch(tempDir, filePath, false, 0, 50)
+	if err != nil {
+		t.Fatalf("TokenizeDiffFromPatch failed: %v", err)
+	}
+
+	if len(result.Hunks) == 0 {
+		t.Fatal("Expected at least one hunk")
+	}
+
+	// Verify tokenization worked
+	hunk := result.Hunks[0]
+	if len(hunk.Blocks) == 0 {
+		t.Error("Expected blocks in hunk")
+	}
+
+	// Should have additions and deletions
+	if result.Additions == 0 {
+		t.Error("Expected additions count > 0")
+	}
+	if result.Deletions == 0 {
+		t.Error("Expected deletions count > 0")
+	}
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("git %v failed: %v", args, err)
 	}
 }

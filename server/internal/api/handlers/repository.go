@@ -9,26 +9,30 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"gitweb/server/internal/config"
 	"gitweb/server/internal/git"
 	"gitweb/server/internal/models"
+	"gitweb/server/internal/registry"
 	"gitweb/server/internal/services"
 
 	"github.com/go-chi/chi/v5"
 )
 
 type RepositoryHandler struct {
+	mu            sync.RWMutex
 	gitService    *git.Service
 	repositories  map[string]*models.Repository
 	dataPath      string
 	watcher       *git.RepositoryWatcher
 	config        *config.Config
 	claudeService *services.ClaudeService
+	registry      *registry.Registry
 }
 
-func NewRepositoryHandler(dataPath string, cfg *config.Config) *RepositoryHandler {
+func NewRepositoryHandler(dataPath string, cfg *config.Config, reg *registry.Registry) *RepositoryHandler {
 	watcher, err := git.NewRepositoryWatcher()
 	if err != nil {
 		// Log error but don't fail initialization - we can still function without watching
@@ -42,6 +46,7 @@ func NewRepositoryHandler(dataPath string, cfg *config.Config) *RepositoryHandle
 		watcher:       watcher,
 		config:        cfg,
 		claudeService: services.NewClaudeService(cfg),
+		registry:      reg,
 	}
 
 	// Load repositories at initialization so they're available for all handlers
@@ -53,30 +58,27 @@ func NewRepositoryHandler(dataPath string, cfg *config.Config) *RepositoryHandle
 }
 
 func (h *RepositoryHandler) loadRepositories() error {
-	if _, err := os.Stat(h.dataPath); os.IsNotExist(err) {
-		return os.MkdirAll(h.dataPath, 0o755)
+	if h.registry == nil {
+		return nil
 	}
 
-	entries, err := os.ReadDir(h.dataPath)
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			repoPath := filepath.Join(h.dataPath, entry.Name())
-			if h.isGitRepository(repoPath) {
-				repo := &models.Repository{
-					ID:        entry.Name(),
-					Name:      entry.Name(),
-					Path:      repoPath,
-					IsLocal:   true,
-					CreatedAt: time.Now(),
-					UpdatedAt: time.Now(),
-				}
-				h.repositories[repo.ID] = repo
-			}
+	for _, entry := range h.registry.List() {
+		if !h.isGitRepository(entry.Path) {
+			fmt.Printf("Warning: registry entry %q path %q is not a valid git repository, skipping\n", entry.ID, entry.Path)
+			continue
 		}
+
+		repo := &models.Repository{
+			ID:          entry.ID,
+			Name:        entry.Name,
+			Path:        entry.Path,
+			URL:         entry.URL,
+			Description: entry.Description,
+			IsLocal:     entry.URL == "",
+			CreatedAt:   entry.ImportedAt,
+			UpdatedAt:   time.Now(),
+		}
+		h.repositories[repo.ID] = repo
 	}
 
 	return nil
@@ -89,18 +91,18 @@ func (h *RepositoryHandler) isGitRepository(path string) bool {
 }
 
 func (h *RepositoryHandler) ListRepositories(w http.ResponseWriter, r *http.Request) {
-	if err := h.loadRepositories(); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to load repositories: %v", err), http.StatusInternalServerError)
-		return
-	}
-
+	h.mu.RLock()
 	repos := make([]*models.Repository, 0, len(h.repositories))
 	for _, repo := range h.repositories {
+		repos = append(repos, repo)
+	}
+	h.mu.RUnlock()
+
+	for _, repo := range repos {
 		status, err := h.gitService.GetRepositoryStatus(repo.Path)
 		if err == nil {
 			repo.CurrentBranch = status.Branch
 		}
-		repos = append(repos, repo)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -154,7 +156,36 @@ func (h *RepositoryHandler) CreateRepository(w http.ResponseWriter, r *http.Requ
 		UpdatedAt:   time.Now(),
 	}
 
+	// Get branch info
+	status, err := h.gitService.GetRepositoryStatus(repoPath)
+	if err == nil {
+		repo.CurrentBranch = status.Branch
+	}
+
+	// Persist to registry first
+	if h.registry != nil {
+		source := "created"
+		if req.URL != "" {
+			source = "cloned"
+		}
+		regEntry := registry.Entry{
+			ID:          repoID,
+			Name:        req.Name,
+			Path:        repoPath,
+			URL:         req.URL,
+			Description: req.Description,
+			Source:      source,
+			ImportedAt:  time.Now(),
+		}
+		if err := h.registry.Add(regEntry); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to persist repository: %v", err), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	h.mu.Lock()
 	h.repositories[repoID] = repo
+	h.mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -164,7 +195,10 @@ func (h *RepositoryHandler) CreateRepository(w http.ResponseWriter, r *http.Requ
 func (h *RepositoryHandler) GetRepository(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -182,18 +216,25 @@ func (h *RepositoryHandler) GetRepository(w http.ResponseWriter, r *http.Request
 func (h *RepositoryHandler) DeleteRepository(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
-	repo, exists := h.repositories[repoID]
+	h.mu.RLock()
+	_, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
 	}
 
-	if err := os.RemoveAll(repo.Path); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to delete repository: %v", err), http.StatusInternalServerError)
-		return
+	if h.registry != nil {
+		if err := h.registry.Remove(repoID); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to remove repository from registry: %v", err), http.StatusInternalServerError)
+			return
+		}
 	}
 
+	h.mu.Lock()
 	delete(h.repositories, repoID)
+	h.mu.Unlock()
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -201,7 +242,10 @@ func (h *RepositoryHandler) DeleteRepository(w http.ResponseWriter, r *http.Requ
 func (h *RepositoryHandler) GetRepositoryStatus(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -231,7 +275,10 @@ func (h *RepositoryHandler) GetRepositoryStatus(w http.ResponseWriter, r *http.R
 func (h *RepositoryHandler) GetCommitHistory(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -258,7 +305,10 @@ func (h *RepositoryHandler) GetCommitHistory(w http.ResponseWriter, r *http.Requ
 func (h *RepositoryHandler) GetBranches(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -277,7 +327,10 @@ func (h *RepositoryHandler) GetBranches(w http.ResponseWriter, r *http.Request) 
 func (h *RepositoryHandler) CreateCommit(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -307,7 +360,10 @@ func (h *RepositoryHandler) CreateCommit(w http.ResponseWriter, r *http.Request)
 func (h *RepositoryHandler) CreateBranch(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -340,7 +396,10 @@ func (h *RepositoryHandler) SwitchBranch(w http.ResponseWriter, r *http.Request)
 	repoID := chi.URLParam(r, "id")
 	branchName := chi.URLParam(r, "branch")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -359,7 +418,10 @@ func (h *RepositoryHandler) SwitchBranch(w http.ResponseWriter, r *http.Request)
 func (h *RepositoryHandler) GetFileTree(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -388,7 +450,10 @@ func (h *RepositoryHandler) GetFileContent(w http.ResponseWriter, r *http.Reques
 		decodedPath = filePath // fallback to original if decoding fails
 	}
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -412,7 +477,10 @@ func (h *RepositoryHandler) SaveFileContent(w http.ResponseWriter, r *http.Reque
 		decodedPath = filePath // fallback to original if decoding fails
 	}
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -437,7 +505,10 @@ func (h *RepositoryHandler) SaveFileContent(w http.ResponseWriter, r *http.Reque
 func (h *RepositoryHandler) Push(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -456,7 +527,10 @@ func (h *RepositoryHandler) Push(w http.ResponseWriter, r *http.Request) {
 func (h *RepositoryHandler) ForcePush(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -500,13 +574,15 @@ func (h *RepositoryHandler) ImportRepository(w http.ResponseWriter, r *http.Requ
 		repoName = filepath.Base(req.Path)
 	}
 
-	// Generate a unique ID for the repository
+	// Generate a unique ID for the repository (with mutex protection)
+	h.mu.Lock()
 	repoID := repoName
 	counter := 1
 	for _, exists := h.repositories[repoID]; exists; _, exists = h.repositories[repoID] {
 		repoID = fmt.Sprintf("%s-%d", repoName, counter)
 		counter++
 	}
+	h.mu.Unlock()
 
 	// Create repository record
 	repo := &models.Repository{
@@ -524,7 +600,26 @@ func (h *RepositoryHandler) ImportRepository(w http.ResponseWriter, r *http.Requ
 		repo.CurrentBranch = status.Branch
 	}
 
+	// Persist to registry first (if registry exists)
+	if h.registry != nil {
+		regEntry := registry.Entry{
+			ID:          repoID,
+			Name:        repoName,
+			Path:        req.Path,
+			URL:         "",
+			Description: "",
+			Source:      "imported",
+			ImportedAt:  time.Now(),
+		}
+		if err := h.registry.Add(regEntry); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to persist repository: %v", err), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	h.mu.Lock()
 	h.repositories[repoID] = repo
+	h.mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -534,7 +629,10 @@ func (h *RepositoryHandler) ImportRepository(w http.ResponseWriter, r *http.Requ
 func (h *RepositoryHandler) Pull(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -558,7 +656,10 @@ func (h *RepositoryHandler) StageFile(w http.ResponseWriter, r *http.Request) {
 		decodedPath = filePath // fallback to original if decoding fails
 	}
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -577,7 +678,10 @@ func (h *RepositoryHandler) StageFile(w http.ResponseWriter, r *http.Request) {
 func (h *RepositoryHandler) StageAllFiles(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -601,7 +705,10 @@ func (h *RepositoryHandler) UnstageFile(w http.ResponseWriter, r *http.Request) 
 		decodedPath = filePath // fallback to original if decoding fails
 	}
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -621,7 +728,10 @@ func (h *RepositoryHandler) GetCommitDetails(w http.ResponseWriter, r *http.Requ
 	repoID := chi.URLParam(r, "id")
 	commitHash := chi.URLParam(r, "hash")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -649,7 +759,10 @@ func (h *RepositoryHandler) DeleteBranch(w http.ResponseWriter, r *http.Request)
 	repoID := chi.URLParam(r, "id")
 	branchName := chi.URLParam(r, "branch")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -678,7 +791,10 @@ func (h *RepositoryHandler) GetFileDiff(w http.ResponseWriter, r *http.Request) 
 		decodedPath = filePath // fallback to original if decoding fails
 	}
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -702,7 +818,10 @@ func (h *RepositoryHandler) GetFileDiff(w http.ResponseWriter, r *http.Request) 
 func (h *RepositoryHandler) GenerateCommitMessage(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		// Try to load the repository directly from the data path
 		repoPath := filepath.Join(h.dataPath, repoID)
@@ -754,7 +873,10 @@ func (h *RepositoryHandler) GenerateCommitMessage(w http.ResponseWriter, r *http
 func (h *RepositoryHandler) GetGitConfig(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -775,7 +897,10 @@ func (h *RepositoryHandler) GetGitConfig(w http.ResponseWriter, r *http.Request)
 func (h *RepositoryHandler) HandleTokenizedFileDiff(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return
@@ -814,7 +939,10 @@ func (h *RepositoryHandler) HandleTokenizedFileDiff(w http.ResponseWriter, r *ht
 func (h *RepositoryHandler) HandleTokenizedCommitDiff(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
+	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
 		return

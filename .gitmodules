@@ -1,0 +1,3 @@
+[submodule "gitty-app"]
+	path = gitty-app
+	url = git@github.com:thaodangspace/gitty-app.git

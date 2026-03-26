@@ -13,15 +13,17 @@ import (
 	"gitweb/server/internal/api"
 	"gitweb/server/internal/auth"
 	"gitweb/server/internal/config"
+	"gitweb/server/internal/registry"
 
 	"github.com/go-chi/chi/v5"
 )
 
 func main() {
-	dataPath := os.Getenv("GITWEB_DATA_PATH")
+	homeDir, _ := os.UserHomeDir()
+
+	dataPath := os.Getenv("GITTY_DATA_PATH")
 	if dataPath == "" {
-		homeDir, _ := os.UserHomeDir()
-		dataPath = filepath.Join(homeDir, ".gitweb", "repositories")
+		dataPath = filepath.Join(homeDir, ".gitty", "repositories")
 	}
 
 	if err := os.MkdirAll(dataPath, 0o755); err != nil {
@@ -41,7 +43,23 @@ func main() {
 		cfg.MasterPassword = &masterPassword
 	}
 
-	apiRouter := api.NewRouter(dataPath, cfg)
+	// Initialize registry
+	registryPath := filepath.Join(homeDir, ".config", "gitty", "repository.json")
+	reg, err := registry.New(registryPath)
+	if err != nil {
+		log.Fatalf("Failed to load repository registry: %v", err)
+	}
+
+	// Warn about legacy data directory (only if ~/.gitweb exists and ~/.gitty does not)
+	legacyPath := filepath.Join(homeDir, ".gitweb")
+	newPath := filepath.Join(homeDir, ".gitty")
+	if _, err := os.Stat(legacyPath); err == nil {
+		if _, err := os.Stat(newPath); os.IsNotExist(err) {
+			log.Printf("Warning: Legacy directory %s found but %s does not exist. Repositories stored there are no longer auto-discovered. Use the import API to re-add them.", legacyPath, newPath)
+		}
+	}
+
+	apiRouter := api.NewRouter(dataPath, cfg, reg)
 
 	r := chi.NewRouter()
 

@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diff Color Comparison</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #e6edf3;
+            padding: 2rem;
+        }
+
+        h1 {
+            margin-bottom: 0.5rem;
+            color: #fff;
+        }
+
+        .subtitle {
+            color: #8b949e;
+            margin-bottom: 2rem;
+        }
+
+        .section {
+            margin-bottom: 3rem;
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #58a6ff;
+        }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 2rem;
+        }
+
+        .diff-panel {
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #0d1117;
+        }
+
+        .panel-header {
+            padding: 0.75rem 1rem;
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+
+        .diff-line {
+            display: flex;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .line-num {
+            width: 50px;
+            text-align: right;
+            padding-right: 12px;
+            color: #6e7681;
+            user-select: none;
+            flex-shrink: 0;
+        }
+
+        .line-content {
+            flex: 1;
+            padding: 2px 12px;
+            white-space: pre;
+        }
+
+        .prefix {
+            color: #6e7681;
+            margin-right: 8px;
+            user-select: none;
+        }
+
+        /* CURRENT IMPLEMENTATION */
+        .current-added {
+            background: rgba(35, 134, 54, 0.15);
+        }
+
+        .current-deleted {
+            background: rgba(218, 54, 51, 0.15);
+        }
+
+        .current-context {
+            background: transparent;
+        }
+
+        /* Current token colors (dark theme from backend) */
+        .tok-keyword { color: #C678DD; }
+        .tok-string { color: #98C379; }
+        .tok-number { color: #D19A66; }
+        .tok-comment { color: #5C6370; }
+        .tok-function { color: #61AFEF; }
+        .tok-type { color: #E5C07B; }
+        .tok-operator { color: #56B6C2; }
+        .tok-default { color: #E6EDF3; }
+
+        /* PROPOSED - Option 1: Subtle borders + minimal tint */
+        .proposed1-added {
+            background: rgba(46, 160, 67, 0.08);
+            border-left: 3px solid #2ea043;
+        }
+
+        .proposed1-deleted {
+            background: rgba(248, 81, 73, 0.08);
+            border-left: 3px solid #f85149;
+        }
+
+        .proposed1-context {
+            background: transparent;
+        }
+
+        /* PROPOSED - Option 2: GitHub-style with better token contrast */
+        .proposed2-added {
+            background: rgba(46, 160, 67, 0.12);
+            border-bottom: 1px solid rgba(46, 160, 67, 0.2);
+        }
+
+        .proposed2-deleted {
+            background: rgba(248, 81, 73, 0.12);
+            border-bottom: 1px solid rgba(248, 81, 73, 0.2);
+        }
+
+        .proposed2-context {
+            background: transparent;
+        }
+
+        /* PROPOSED - Option 3: Edge highlighting only */
+        .proposed3-added {
+            background: transparent;
+            border-left: 4px solid #2ea043;
+            border-right: 2px solid rgba(46, 160, 67, 0.3);
+        }
+
+        .proposed3-deleted {
+            background: transparent;
+            border-left: 4px solid #f85149;
+            border-right: 2px solid rgba(248, 81, 73, 0.3);
+        }
+
+        .proposed3-context {
+            background: transparent;
+        }
+
+        /* Token colors optimized for each proposal */
+        .opt1-keyword, .opt2-keyword, .opt3-keyword { color: #d2a8ff; }
+        .opt1-string, .opt2-string, .opt3-string { color: #7ee787; }
+        .opt1-number, .opt2-number, .opt3-number { color: #ffab70; }
+        .opt1-comment, .opt2-comment, .opt3-comment { color: #8b949e; }
+        .opt1-function, .opt2-function, .opt3-function { color: #79c0ff; }
+        .opt1-type, .opt2-type, .opt3-type { color: #ffa657; }
+        .opt1-operator, .opt2-operator, .opt3-operator { color: #76e3ea; }
+        .opt1-default, .opt2-default, .opt3-default { color: #e6edf3; }
+
+        .legend {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #161b22;
+            border-radius: 6px;
+            font-size: 0.875rem;
+        }
+
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-right: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .legend-box {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+        }
+
+        .code-sample {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+        }
+
+        .option-label {
+            text-align: center;
+            padding: 0.5rem;
+            background: #21262d;
+            color: #8b949e;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+    </style>
+</head>
+<body>
+    <h1>Diff Color Comparison</h1>
+    <p class="subtitle">Testing token readability against different background styles</p>
+
+    <div class="section">
+        <h2 class="section-title">Current Implementation (Problem)</h2>
+        <p style="color: #8b949e; margin-bottom: 1rem;">
+            The current green/red backgrounds compete with syntax highlighting colors, making tokens hard to distinguish.
+        </p>
+        <div class="comparison-grid">
+            <!-- Current - Added Line -->
+            <div class="diff-panel">
+                <div class="panel-header">Added Line</div>
+                <div class="current-added diff-line">
+                    <span class="line-num">42</span>
+                    <span class="line-content">
+                        <span class="prefix">+</span>
+                        <span class="tok-keyword">const</span>
+                        <span class="tok-default"> </span>
+                        <span class="tok-function">calculateTotal</span>
+                        <span class="tok-operator"> = </span>
+                        <span class="tok-default">(</span>
+                        <span class="tok-type">items</span>
+                        <span class="tok-default">: </span>
+                        <span class="tok-type">CartItem</span>
+                        <span class="tok-default">[]) </span>
+                        <span class="tok-operator">=></span>
+                        <span class="tok-default"> {</span>
+                    </span>
+                </div>
+                <div class="current-added diff-line">
+                    <span class="line-num">43</span>
+                    <span class="line-content">
+                        <span class="prefix">+</span>
+                        <span class="tok-default">  </span>
+                        <span class="tok-keyword">return</span>
+                        <span class="tok-default"> </span>
+                        <span class="tok-function">items</span>
+                        <span class="tok-default">.</span>
+                        <span class="tok-function">reduce</span>
+                        <span class="tok-default">((</span>
+                        <span class="tok-keyword">sum</span>
+                        <span class="tok-default">, </span>
+                        <span class="tok-keyword">item</span>
+                        <span class="tok-default">) </span>
+                        <span class="tok-operator">=></span>
+                    </span>
+                </div>
+                <div class="current-added diff-line">
+                    <span class="line-num">44</span>
+                    <span class="line-content">
+                        <span class="prefix">+</span>
+                        <span class="tok-default">    </span>
+                        <span class="tok-keyword">sum</span>
+                        <span class="tok-default"> + </span>
+                        <span class="tok-function">item</span>
+                        <span class="tok-default">.</span>
+                        <span class="tok-function">price</span>
+                        <span class="tok-default">, </span>
+                        <span class="tok-number">0</span>
+                        <span class="tok-default">);</span>
+                    </span>
+                </div>
+            </div>
+
+            <!-- Current - Deleted Line -->
+            <div class="diff-panel">
+                <div class="panel-header">Deleted Line</div>
+                <div class="current-deleted diff-line">
+                    <span class="line-num">15</span>
+                    <span class="line-content">
+                        <span class="prefix">-</span>
+                        <span class="tok-keyword">function</span>
+                        <span class="tok-default"> </span>
+                        <span class="tok-function">getTotal</span>
+                        <span class="tok-default">(</span>
+                        <span class="tok-type">array</span>
+                        <span class="tok-default">) {</span>
+                    </span>
+                </div>
+                <div class="current-deleted diff-line">
+                    <span class="line-num">16</span>
+                    <span class="line-content">
+                        <span class="prefix">-</span>
+                        <span class="tok-default">  </span>
+                        <span class="tok-keyword">let</span>
+                        <span class="tok-default"> </span>
+                        <span class="tok-keyword">total</span>
+                        <span class="tok-default"> = </span>
+                        <span class="tok-number">0</span>
+                        <span class="tok-default">;</span>
+                    </span>
+                </div>
+                <div class="current-deleted diff-line">
+                    <span class="line-num">17</span>
+                    <span class="line-content">
+                        <span class="prefix">-</span>
+                        <span class="tok-keyword">for</span>
+                        <span class="tok-default"> (</span>
+                        <span class="tok-keyword">let</span>
+                        <span class="tok-default"> </span>
+                        <span class="tok-keyword">i</span>
+                        <span class="tok-default"> = </span>
+                        <span class="tok-number">0</span>
+                        <span class="tok-default">; </span>
+                        <span class="tok-keyword">i</span>
+                        <span class="tok-default"> < </span>
+                        <span class="tok-keyword">array</span>
+                        <span class="tok-default">.</span>
+                        <span class="tok-function">length</span>
+                        <span class="tok-default">; </span>
+                        <span class="tok-keyword">i</span>
+                        <span class="tok-default">++) {</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2 class="section-title">Option 1: Subtle Tint + Edge Highlight</h2>
+        <p style="color: #8b949e; margin-bottom: 1rem;">
+            Reduced background opacity (8%) with a colored left border. Tokens pop better against lighter tint.
+        </p>
+        <div class="comparison-grid">
+            <div class="diff-panel">
+                <div class="option-label">Added Lines</div>
+                <div class="proposed1-added diff-line">
+                    <span class="line-num">42</span>
+                    <span class="line-content">
+                        <span class="prefix opt1-default">+</span>
+                        <span class="opt1-keyword">const</span>
+                        <span class="opt1-default"> </span>
+                        <span class="opt1-function">calculateTotal</span>
+                        <span class="opt1-operator"> = </span>
+                        <span class="opt1-default">(</span>
+                        <span class="opt1-type">items</span>
+                        <span class="opt1-default">: </span>
+                        <span class="opt1-type">CartItem</span>
+                        <span class="opt1-default">[]) </span>
+                        <span class="opt1-operator">=></span>
+                        <span class="opt1-default"> {</span>
+                    </span>
+                </div>
+                <div class="proposed1-added diff-line">
+                    <span class="line-num">43</span>
+                    <span class="line-content">
+                        <span class="prefix opt1-default">+</span>
+                        <span class="opt1-default">  </span>
+                        <span class="opt1-keyword">return</span>
+                        <span class="opt1-default"> </span>
+                        <span class="opt1-function">items</span>
+                        <span class="opt1-default">.</span>
+                        <span class="opt1-function">reduce</span>
+                        <span class="opt1-default">((</span>
+                        <span class="opt1-keyword">sum</span>
+                        <span class="opt1-default">, </span>
+                        <span class="opt1-keyword">item</span>
+                        <span class="opt1-default">) </span>
+                        <span class="opt1-operator">=></span>
+                    </span>
+                </div>
+                <div class="proposed1-added diff-line">
+                    <span class="line-num">44</span>
+                    <span class="line-content">
+                        <span class="prefix opt1-default">+</span>
+                        <span class="opt1-default">    </span>
+                        <span class="opt1-keyword">sum</span>
+                        <span class="opt1-default"> + </span>
+                        <span class="opt1-function">item</span>
+                        <span class="opt1-default">.</span>
+                        <span class="opt1-function">price</span>
+                        <span class="opt1-default">, </span>
+                        <span class="opt1-number">0</span>
+                        <span class="opt1-default">);</span>
+                    </span>
+                </div>
+            </div>
+
+            <div class="diff-panel">
+                <div class="option-label">Deleted Lines</div>
+                <div class="proposed1-deleted diff-line">
+                    <span class="line-num">15</span>
+                    <span class="line-content">
+                        <span class="prefix opt1-default">-</span>
+                        <span class="opt1-keyword">function</span>
+                        <span class="opt1-default"> </span>
+                        <span class="opt1-function">getTotal</span>
+                        <span class="opt1-default">(</span>
+                        <span class="opt1-type">array</span>
+                        <span class="opt1-default">) {</span>
+                    </span>
+                </div>
+                <div class="proposed1-deleted diff-line">
+                    <span class="line-num">16</span>
+                    <span class="line-content">
+                        <span class="prefix opt1-default">-</span>
+                        <span class="opt1-default">  </span>
+                        <span class="opt1-keyword">let</span>
+                        <span class="opt1-default"> </span>
+                        <span class="opt1-keyword">total</span>
+                        <span class="opt1-default"> = </span>
+                        <span class="opt1-number">0</span>
+                        <span class="opt1-default">;</span>
+                    </span>
+                </div>
+                <div class="proposed1-deleted diff-line">
+                    <span class="line-num">17</span>
+                    <span class="line-content">
+                        <span class="prefix opt1-default">-</span>
+                        <span class="opt1-keyword">for</span>
+                        <span class="opt1-default"> (</span>
+                        <span class="opt1-keyword">let</span>
+                        <span class="opt1-default"> </span>
+                        <span class="opt1-keyword">i</span>
+                        <span class="opt1-default"> = </span>
+                        <span class="opt1-number">0</span>
+                        <span class="opt1-default">; </span>
+                        <span class="opt1-keyword">i</span>
+                        <span class="opt1-default"> < </span>
+                        <span class="opt1-keyword">array</span>
+                        <span class="opt1-default">.</span>
+                        <span class="opt1-function">length</span>
+                        <span class="opt1-default">; </span>
+                        <span class="opt1-keyword">i</span>
+                        <span class="opt1-default">++) {</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2 class="section-title">Option 2: GitHub-Style (Balanced)</h2>
+        <p style="color: #8b949e; margin-bottom: 1rem;">
+            Similar to GitHub's approach - moderate tint with subtle bottom border. Good balance of visibility and readability.
+        </p>
+        <div class="comparison-grid">
+            <div class="diff-panel">
+                <div class="option-label">Added Lines</div>
+                <div class="proposed2-added diff-line">
+                    <span class="line-num">42</span>
+                    <span class="line-content">
+                        <span class="prefix opt2-default">+</span>
+                        <span class="opt2-keyword">const</span>
+                        <span class="opt2-default"> </span>
+                        <span class="opt2-function">calculateTotal</span>
+                        <span class="opt2-operator"> = </span>
+                        <span class="opt2-default">(</span>
+                        <span class="opt2-type">items</span>
+                        <span class="opt2-default">: </span>
+                        <span class="opt2-type">CartItem</span>
+                        <span class="opt2-default">[]) </span>
+                        <span class="opt2-operator">=></span>
+                        <span class="opt2-default"> {</span>
+                    </span>
+                </div>
+                <div class="proposed2-added diff-line">
+                    <span class="line-num">43</span>
+                    <span class="line-content">
+                        <span class="prefix opt2-default">+</span>
+                        <span class="opt2-default">  </span>
+                        <span class="opt2-keyword">return</span>
+                        <span class="opt2-default"> </span>
+                        <span class="opt2-function">items</span>
+                        <span class="opt2-default">.</span>
+                        <span class="opt2-function">reduce</span>
+                        <span class="opt2-default">((</span>
+                        <span class="opt2-keyword">sum</span>
+                        <span class="opt2-default">, </span>
+                        <span class="opt2-keyword">item</span>
+                        <span class="opt2-default">) </span>
+                        <span class="opt2-operator">=></span>
+                    </span>
+                </div>
+                <div class="proposed2-added diff-line">
+                    <span class="line-num">44</span>
+                    <span class="line-content">
+                        <span class="prefix opt2-default">+</span>
+                        <span class="opt2-default">    </span>
+                        <span class="opt2-keyword">sum</span>
+                        <span class="opt2-default"> + </span>
+                        <span class="opt2-function">item</span>
+                        <span class="opt2-default">.</span>
+                        <span class="opt2-function">price</span>
+                        <span class="opt2-default">, </span>
+                        <span class="opt2-number">0</span>
+                        <span class="opt2-default">);</span>
+                    </span>
+                </div>
+            </div>
+
+            <div class="diff-panel">
+                <div class="option-label">Deleted Lines</div>
+                <div class="proposed2-deleted diff-line">
+                    <span class="line-num">15</span>
+                    <span class="line-content">
+                        <span class="prefix opt2-default">-</span>
+                        <span class="opt2-keyword">function</span>
+                        <span class="opt2-default"> </span>
+                        <span class="opt2-function">getTotal</span>
+                        <span class="opt2-default">(</span>
+                        <span class="opt2-type">array</span>
+                        <span class="opt2-default">) {</span>
+                    </span>
+                </div>
+                <div class="proposed2-deleted diff-line">
+                    <span class="line-num">16</span>
+                    <span class="line-content">
+                        <span class="prefix opt2-default">-</span>
+                        <span class="opt2-default">  </span>
+                        <span class="opt2-keyword">let</span>
+                        <span class="opt2-default"> </span>
+                        <span class="opt2-keyword">total</span>
+                        <span class="opt2-default"> = </span>
+                        <span class="opt2-number">0</span>
+                        <span class="opt2-default">;</span>
+                    </span>
+                </div>
+                <div class="proposed2-deleted diff-line">
+                    <span class="line-num">17</span>
+                    <span class="line-content">
+                        <span class="prefix opt2-default">-</span>
+                        <span class="opt2-keyword">for</span>
+                        <span class="opt2-default"> (</span>
+                        <span class="opt2-keyword">let</span>
+                        <span class="opt2-default"> </span>
+                        <span class="opt2-keyword">i</span>
+                        <span class="opt2-default"> = </span>
+                        <span class="opt2-number">0</span>
+                        <span class="opt2-default">; </span>
+                        <span class="opt2-keyword">i</span>
+                        <span class="opt2-default"> < </span>
+                        <span class="opt2-keyword">array</span>
+                        <span class="opt2-default">.</span>
+                        <span class="opt2-function">length</span>
+                        <span class="opt2-default">; </span>
+                        <span class="opt2-keyword">i</span>
+                        <span class="opt2-default">++) {</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2 class="section-title">Option 3: Edge-Only Highlighting</h2>
+        <p style="color: #8b949e; margin-bottom: 1rem;">
+            No background tint - relies entirely on colored borders. Maximum token contrast, minimal visual noise.
+        </p>
+        <div class="comparison-grid">
+            <div class="diff-panel">
+                <div class="option-label">Added Lines</div>
+                <div class="proposed3-added diff-line">
+                    <span class="line-num">42</span>
+                    <span class="line-content">
+                        <span class="prefix opt3-default">+</span>
+                        <span class="opt3-keyword">const</span>
+                        <span class="opt3-default"> </span>
+                        <span class="opt3-function">calculateTotal</span>
+                        <span class="opt3-operator"> = </span>
+                        <span class="opt3-default">(</span>
+                        <span class="opt3-type">items</span>
+                        <span class="opt3-default">: </span>
+                        <span class="opt3-type">CartItem</span>
+                        <span class="opt3-default">[]) </span>
+                        <span class="opt3-operator">=></span>
+                        <span class="opt3-default"> {</span>
+                    </span>
+                </div>
+                <div class="proposed3-added diff-line">
+                    <span class="line-num">43</span>
+                    <span class="line-content">
+                        <span class="prefix opt3-default">+</span>
+                        <span class="opt3-default">  </span>
+                        <span class="opt3-keyword">return</span>
+                        <span class="opt3-default"> </span>
+                        <span class="opt3-function">items</span>
+                        <span class="opt3-default">.</span>
+                        <span class="opt3-function">reduce</span>
+                        <span class="opt3-default">((</span>
+                        <span class="opt3-keyword">sum</span>
+                        <span class="opt3-default">, </span>
+                        <span class="opt3-keyword">item</span>
+                        <span class="opt3-default">) </span>
+                        <span class="opt3-operator">=></span>
+                    </span>
+                </div>
+                <div class="proposed3-added diff-line">
+                    <span class="line-num">44</span>
+                    <span class="line-content">
+                        <span class="prefix opt3-default">+</span>
+                        <span class="opt3-default">    </span>
+                        <span class="opt3-keyword">sum</span>
+                        <span class="opt3-default"> + </span>
+                        <span class="opt3-function">item</span>
+                        <span class="opt3-default">.</span>
+                        <span class="opt3-function">price</span>
+                        <span class="opt3-default">, </span>
+                        <span class="opt3-number">0</span>
+                        <span class="opt3-default">);</span>
+                    </span>
+                </div>
+            </div>
+
+            <div class="diff-panel">
+                <div class="option-label">Deleted Lines</div>
+                <div class="proposed3-deleted diff-line">
+                    <span class="line-num">15</span>
+                    <span class="line-content">
+                        <span class="prefix opt3-default">-</span>
+                        <span class="opt3-keyword">function</span>
+                        <span class="opt3-default"> </span>
+                        <span class="opt3-function">getTotal</span>
+                        <span class="opt3-default">(</span>
+                        <span class="opt3-type">array</span>
+                        <span class="opt3-default">) {</span>
+                    </span>
+                </div>
+                <div class="proposed3-deleted diff-line">
+                    <span class="line-num">16</span>
+                    <span class="line-content">
+                        <span class="prefix opt3-default">-</span>
+                        <span class="opt3-default">  </span>
+                        <span class="opt3-keyword">let</span>
+                        <span class="opt3-default"> </span>
+                        <span class="opt3-keyword">total</span>
+                        <span class="opt3-default"> = </span>
+                        <span class="opt3-number">0</span>
+                        <span class="opt3-default">;</span>
+                    </span>
+                </div>
+                <div class="proposed3-deleted diff-line">
+                    <span class="line-num">17</span>
+                    <span class="line-content">
+                        <span class="prefix opt3-default">-</span>
+                        <span class="opt3-keyword">for</span>
+                        <span class="opt3-default"> (</span>
+                        <span class="opt3-keyword">let</span>
+                        <span class="opt3-default"> </span>
+                        <span class="opt3-keyword">i</span>
+                        <span class="opt3-default"> = </span>
+                        <span class="opt3-number">0</span>
+                        <span class="opt3-default">; </span>
+                        <span class="opt3-keyword">i</span>
+                        <span class="opt3-default"> < </span>
+                        <span class="opt3-keyword">array</span>
+                        <span class="opt3-default">.</span>
+                        <span class="opt3-function">length</span>
+                        <span class="opt3-default">; </span>
+                        <span class="opt3-keyword">i</span>
+                        <span class="opt3-default">++) {</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2 class="section-title">Token Color Palette Comparison</h2>
+        <div class="comparison-grid">
+            <div class="code-sample">
+                <strong style="color: #8b949e; display: block; margin-bottom: 0.75rem;">Current (Dark Theme)</strong>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    <span class="tok-keyword">keyword #C678DD</span>
+                    <span class="tok-string">string #98C379</span>
+                    <span class="tok-number">number #D19A66</span>
+                    <span class="tok-function">function #61AFEF</span>
+                    <span class="tok-type">type #E5C07B</span>
+                    <span class="tok-comment">comment #5C6370</span>
+                    <span class="tok-operator">operator #56B6C2</span>
+                </div>
+            </div>
+
+            <div class="code-sample">
+                <strong style="color: #8b949e; display: block; margin-bottom: 0.75rem;">Proposed (Higher Contrast)</strong>
+                <div style="display: flex; flex-wrap: gap: 0.5rem;">
+                    <span class="opt1-keyword">keyword #d2a8ff</span>
+                    <span class="opt1-string">string #7ee787</span>
+                    <span class="opt1-number">number #ffab70</span>
+                    <span class="opt1-function">function #79c0ff</span>
+                    <span class="opt1-type">type #ffa657</span>
+                    <span class="opt1-comment">comment #8b949e</span>
+                    <span class="opt1-operator">operator #76e3ea</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="legend">
+        <strong>Legend:</strong>
+        <div class="legend-item">
+            <div class="legend-box" style="background: rgba(46, 160, 67, 0.15); border: 1px solid #30363d;"></div>
+            <span>Added</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-box" style="background: rgba(248, 81, 73, 0.15); border: 1px solid #30363d;"></div>
+            <span>Deleted</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-box" style="background: transparent; border: 1px solid #30363d;"></div>
+            <span>Context</span>
+        </div>
+    </div>
+</body>
+</html>

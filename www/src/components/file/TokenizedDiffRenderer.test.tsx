@@ -99,13 +99,16 @@ describe('TokenizedDiffRenderer', () => {
   it('applies correct background colors for line types', () => {
     render(<TokenizedDiffRenderer diff={mockDiff} />);
 
-    // Alternative: check parent elements for the background color class
-    const allFlexDivs = document.querySelectorAll('.flex');
-    const addedLineDiv = Array.from(allFlexDivs).find(div =>
-      div.textContent?.includes('const y = 2;') && div.className.includes('bg-green-100')
+    // Check for added line with green tint and border
+    const addedLineDiv = Array.from(document.querySelectorAll('.flex')).find(div =>
+      div.textContent?.includes('const y = 2;') &&
+      (div as HTMLElement).style.backgroundColor.includes('46, 160, 67')
     );
-    const deletedLineDiv = Array.from(allFlexDivs).find(div =>
-      div.textContent?.includes('const z = 3;') && div.className.includes('bg-red-100')
+
+    // Check for deleted line with red tint and border
+    const deletedLineDiv = Array.from(document.querySelectorAll('.flex')).find(div =>
+      div.textContent?.includes('const z = 3;') &&
+      (div as HTMLElement).style.backgroundColor.includes('248, 81, 73')
     );
 
     expect(addedLineDiv).toBeDefined();

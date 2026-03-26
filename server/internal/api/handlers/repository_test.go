@@ -13,6 +13,7 @@ import (
 
 	"gitweb/server/internal/git"
 	"gitweb/server/internal/models"
+	"gitweb/server/internal/registry"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -81,7 +82,7 @@ func TestNewRepositoryHandler(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 	if handler == nil {
 		t.Fatal("NewRepositoryHandler returned nil")
 	}
@@ -100,7 +101,7 @@ func TestNewRepositoryHandler(t *testing.T) {
 }
 
 func TestIsGitRepository(t *testing.T) {
-	handler := NewRepositoryHandler("", nil)
+	handler := NewRepositoryHandler("", nil, nil)
 
 	tempDir, err := os.MkdirTemp("", "handler_test")
 	if err != nil {
@@ -133,7 +134,7 @@ func TestListRepositories(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -148,6 +149,18 @@ func TestListRepositories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Manually add repository to handler (since we no longer scan dataPath)
+	handler.mu.Lock()
+	handler.repositories["test-repo"] = &models.Repository{
+		ID:        "test-repo",
+		Name:      "test-repo",
+		Path:      repoDir,
+		IsLocal:   true,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	handler.mu.Unlock()
 
 	// Create HTTP request
 	req := httptest.NewRequest("GET", "/repositories", nil)
@@ -193,7 +206,7 @@ func TestCreateRepository(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
 	// Test creating a repository
 	createReq := models.CreateRepositoryRequest{
@@ -239,7 +252,7 @@ func TestCreateRepositoryInvalidRequest(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
 	// Test with empty name
 	createReq := models.CreateRepositoryRequest{
@@ -271,7 +284,7 @@ func TestGetRepository(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -332,7 +345,7 @@ func TestGetRepositoryNotFound(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
 	// Create HTTP request with non-existent repository ID
 	req := httptest.NewRequest("GET", "/repositories/non-existent", nil)
@@ -359,7 +372,7 @@ func TestDeleteRepository(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -375,6 +388,7 @@ func TestDeleteRepository(t *testing.T) {
 	}
 
 	// Add repository to handler
+	handler.mu.Lock()
 	handler.repositories["test-repo"] = &models.Repository{
 		ID:        "test-repo",
 		Name:      "test-repo",
@@ -383,6 +397,7 @@ func TestDeleteRepository(t *testing.T) {
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
+	handler.mu.Unlock()
 
 	// Create HTTP request
 	req := httptest.NewRequest("DELETE", "/repositories/test-repo", nil)
@@ -401,9 +416,17 @@ func TestDeleteRepository(t *testing.T) {
 		t.Errorf("Expected status 204, got %d", w.Code)
 	}
 
-	// Verify repository was deleted
-	if _, err := os.Stat(repoDir); !os.IsNotExist(err) {
-		t.Error("Repository directory was not deleted")
+	// Verify repository was removed from handler (but directory is NOT deleted)
+	handler.mu.RLock()
+	_, exists := handler.repositories["test-repo"]
+	handler.mu.RUnlock()
+	if exists {
+		t.Error("Repository should be removed from handler")
+	}
+
+	// Repository directory should still exist (we don't delete files anymore)
+	if _, err := os.Stat(repoDir); os.IsNotExist(err) {
+		t.Error("Repository directory should not be deleted")
 	}
 }
 
@@ -414,7 +437,7 @@ func TestGetRepositoryStatus(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
 	// Create a properly initialized test repository
 	_, err = createTestRepository(handler, "test-repo")
@@ -458,30 +481,12 @@ func TestGetCommitHistory(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
-	// Create a test repository
-	repoDir := filepath.Join(tempDir, "test-repo")
-	err = os.Mkdir(repoDir, 0755)
+	// Create a properly initialized test repository
+	_, err = createTestRepository(handler, "test-repo")
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	// Initialize git repository
-	gitDir := filepath.Join(repoDir, ".git")
-	err = os.Mkdir(gitDir, 0755)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Add repository to handler
-	handler.repositories["test-repo"] = &models.Repository{
-		ID:        "test-repo",
-		Name:      "test-repo",
-		Path:      repoDir,
-		IsLocal:   true,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
 	}
 
 	// Create HTTP request
@@ -508,9 +513,9 @@ func TestGetCommitHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Should have at least 0 commits (new repository)
-	if len(commits) < 0 {
-		t.Errorf("Expected at least 0 commits, got %d", len(commits))
+	// Should have at least 1 commit (initial commit)
+	if len(commits) < 1 {
+		t.Errorf("Expected at least 1 commit, got %d", len(commits))
 	}
 }
 
@@ -521,30 +526,12 @@ func TestGetBranches(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
-	// Create a test repository
-	repoDir := filepath.Join(tempDir, "test-repo")
-	err = os.Mkdir(repoDir, 0755)
+	// Create a properly initialized test repository
+	_, err = createTestRepository(handler, "test-repo")
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	// Initialize git repository
-	gitDir := filepath.Join(repoDir, ".git")
-	err = os.Mkdir(gitDir, 0755)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Add repository to handler
-	handler.repositories["test-repo"] = &models.Repository{
-		ID:        "test-repo",
-		Name:      "test-repo",
-		Path:      repoDir,
-		IsLocal:   true,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
 	}
 
 	// Create HTTP request
@@ -584,30 +571,12 @@ func TestCreateCommit(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
-	// Create a test repository
-	repoDir := filepath.Join(tempDir, "test-repo")
-	err = os.Mkdir(repoDir, 0755)
+	// Create a properly initialized test repository
+	repoDir, err := createTestRepository(handler, "test-repo")
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	// Initialize git repository
-	gitDir := filepath.Join(repoDir, ".git")
-	err = os.Mkdir(gitDir, 0755)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Add repository to handler
-	handler.repositories["test-repo"] = &models.Repository{
-		ID:        "test-repo",
-		Name:      "test-repo",
-		Path:      repoDir,
-		IsLocal:   true,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
 	}
 
 	// Create a test file
@@ -646,8 +615,8 @@ func TestCreateCommit(t *testing.T) {
 	handler.CreateCommit(w, req)
 
 	// Check response
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", w.Code)
+	if w.Code != http.StatusCreated {
+		t.Errorf("Expected status 201, got %d", w.Code)
 	}
 }
 
@@ -658,30 +627,12 @@ func TestCreateBranch(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
-	// Create a test repository
-	repoDir := filepath.Join(tempDir, "test-repo")
-	err = os.Mkdir(repoDir, 0755)
+	// Create a properly initialized test repository
+	_, err = createTestRepository(handler, "test-repo")
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	// Initialize git repository
-	gitDir := filepath.Join(repoDir, ".git")
-	err = os.Mkdir(gitDir, 0755)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Add repository to handler
-	handler.repositories["test-repo"] = &models.Repository{
-		ID:        "test-repo",
-		Name:      "test-repo",
-		Path:      repoDir,
-		IsLocal:   true,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
 	}
 
 	// Create branch request
@@ -710,8 +661,8 @@ func TestCreateBranch(t *testing.T) {
 	handler.CreateBranch(w, req)
 
 	// Check response
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", w.Code)
+	if w.Code != http.StatusCreated {
+		t.Errorf("Expected status 201, got %d", w.Code)
 	}
 }
 
@@ -722,52 +673,33 @@ func TestSwitchBranch(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
-	// Create a test repository
-	repoDir := filepath.Join(tempDir, "test-repo")
-	err = os.Mkdir(repoDir, 0755)
+	// Create a properly initialized test repository
+	_, err = createTestRepository(handler, "test-repo")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Initialize git repository
-	gitDir := filepath.Join(repoDir, ".git")
-	err = os.Mkdir(gitDir, 0755)
+	// Get repository path with mutex protection
+	handler.mu.RLock()
+	repo := handler.repositories["test-repo"]
+	handler.mu.RUnlock()
+
+	// Create a new branch first
+	err = handler.gitService.CreateBranch(repo.Path, "feature-branch")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Add repository to handler
-	handler.repositories["test-repo"] = &models.Repository{
-		ID:        "test-repo",
-		Name:      "test-repo",
-		Path:      repoDir,
-		IsLocal:   true,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-
-	// Create branch request
-	branchReq := struct {
-		Name string `json:"name"`
-	}{
-		Name: "main",
-	}
-
-	reqBody, err := json.Marshal(branchReq)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create HTTP request
-	req := httptest.NewRequest("POST", "/repositories/test-repo/branches/switch", bytes.NewBuffer(reqBody))
-	req.Header.Set("Content-Type", "application/json")
+	// Create HTTP request to switch to the new branch
+	req := httptest.NewRequest("POST", "/repositories/test-repo/branches/switch/feature-branch", nil)
 	w := httptest.NewRecorder()
 
 	// Set up chi router context
 	chiCtx := chi.NewRouteContext()
 	chiCtx.URLParams.Add("id", "test-repo")
+	chiCtx.URLParams.Add("branch", "feature-branch")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
 
 	// Call handler
@@ -775,7 +707,7 @@ func TestSwitchBranch(t *testing.T) {
 
 	// Check response
 	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", w.Code)
+		t.Errorf("Expected status 200, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -786,7 +718,7 @@ func TestGetFileTree(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -872,7 +804,7 @@ func TestGetFileContent(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -937,7 +869,7 @@ func TestSaveFileContent(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
 	// Create a test repository
 	repoDir := filepath.Join(tempDir, "test-repo")
@@ -1015,18 +947,10 @@ func TestStageFile(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
-	// Create a test repository
-	repoDir := filepath.Join(tempDir, "test-repo")
-	err = os.Mkdir(repoDir, 0755)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Initialize git repository
-	gitDir := filepath.Join(repoDir, ".git")
-	err = os.Mkdir(gitDir, 0755)
+	// Create a properly initialized test repository
+	repoDir, err := createTestRepository(handler, "test-repo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1038,36 +962,14 @@ func TestStageFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Add repository to handler
-	handler.repositories["test-repo"] = &models.Repository{
-		ID:        "test-repo",
-		Name:      "test-repo",
-		Path:      repoDir,
-		IsLocal:   true,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-
-	// Create stage request
-	stageReq := struct {
-		Path string `json:"path"`
-	}{
-		Path: "test.txt",
-	}
-
-	reqBody, err := json.Marshal(stageReq)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create HTTP request
-	req := httptest.NewRequest("POST", "/repositories/test-repo/stage", bytes.NewBuffer(reqBody))
-	req.Header.Set("Content-Type", "application/json")
+	// Create HTTP request with file path in URL
+	req := httptest.NewRequest("POST", "/repositories/test-repo/stage/test.txt", nil)
 	w := httptest.NewRecorder()
 
 	// Set up chi router context
 	chiCtx := chi.NewRouteContext()
 	chiCtx.URLParams.Add("id", "test-repo")
+	chiCtx.URLParams.Add("*", "test.txt")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
 
 	// Call handler
@@ -1086,18 +988,10 @@ func TestUnstageFile(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
-	// Create a test repository
-	repoDir := filepath.Join(tempDir, "test-repo")
-	err = os.Mkdir(repoDir, 0755)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Initialize git repository
-	gitDir := filepath.Join(repoDir, ".git")
-	err = os.Mkdir(gitDir, 0755)
+	// Create a properly initialized test repository
+	repoDir, err := createTestRepository(handler, "test-repo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1109,36 +1003,14 @@ func TestUnstageFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Add repository to handler
-	handler.repositories["test-repo"] = &models.Repository{
-		ID:        "test-repo",
-		Name:      "test-repo",
-		Path:      repoDir,
-		IsLocal:   true,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-
-	// Create unstage request
-	unstageReq := struct {
-		Path string `json:"path"`
-	}{
-		Path: "test.txt",
-	}
-
-	reqBody, err := json.Marshal(unstageReq)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create HTTP request
-	req := httptest.NewRequest("POST", "/repositories/test-repo/unstage", bytes.NewBuffer(reqBody))
-	req.Header.Set("Content-Type", "application/json")
+	// Create HTTP request with file path in URL
+	req := httptest.NewRequest("POST", "/repositories/test-repo/unstage/test.txt", nil)
 	w := httptest.NewRecorder()
 
 	// Set up chi router context
 	chiCtx := chi.NewRouteContext()
 	chiCtx.URLParams.Add("id", "test-repo")
+	chiCtx.URLParams.Add("*", "test.txt")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
 
 	// Call handler
@@ -1171,7 +1043,7 @@ func TestGetFileTree_QueryParams(t *testing.T) {
 	os.WriteFile(filepath.Join(tempDir, "README.md"), []byte("readme"), 0644)
 
 	// Create handler
-	handler := NewRepositoryHandler(tempDir, nil)
+	handler := NewRepositoryHandler(tempDir, nil, nil)
 
 	// Add repository to handler
 	handler.repositories["test-repo"] = &models.Repository{
@@ -1235,5 +1107,62 @@ func TestGetFileTree_QueryParams(t *testing.T) {
 	}
 	if !listing.HasMore || listing.TotalCount < 2 {
 		t.Errorf("Expected has_more=true with total_count >= 2, got has_more=%v, total_count=%d", listing.HasMore, listing.TotalCount)
+	}
+}
+
+func TestImportRepositoryPersistsToRegistry(t *testing.T) {
+	tmp := t.TempDir()
+	dataPath := filepath.Join(tmp, "data")
+	os.MkdirAll(dataPath, 0755)
+
+	regPath := filepath.Join(tmp, "registry", "repository.json")
+	reg, err := registry.New(regPath)
+	if err != nil {
+		t.Fatalf("registry.New() error: %v", err)
+	}
+
+	// Create a git repo to import
+	repoPath := filepath.Join(tmp, "my-repo")
+	os.MkdirAll(repoPath, 0755)
+	svc := git.NewService()
+	svc.InitRepository(repoPath)
+
+	handler := NewRepositoryHandler(dataPath, nil, reg)
+
+	// Import via handler
+	body := bytes.NewBufferString(`{"path":"` + repoPath + `"}`)
+	req := httptest.NewRequest("POST", "/api/repos/import", body)
+	w := httptest.NewRecorder()
+	handler.ImportRepository(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify registry has the entry
+	entries := reg.List()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 registry entry, got %d", len(entries))
+	}
+	if entries[0].Source != "imported" {
+		t.Fatalf("expected source 'imported', got %q", entries[0].Source)
+	}
+
+	// Create a new handler with the same registry — simulates server restart
+	handler2 := NewRepositoryHandler(dataPath, nil, reg)
+	_ = handler2 // loadRepositories runs in constructor
+
+	// Verify the repo is loaded from registry
+	req2 := httptest.NewRequest("GET", "/api/repos", nil)
+	w2 := httptest.NewRecorder()
+	handler2.ListRepositories(w2, req2)
+
+	var repos []models.Repository
+	json.Unmarshal(w2.Body.Bytes(), &repos)
+	if len(repos) != 1 {
+		t.Fatalf("expected 1 repo after reload, got %d", len(repos))
+	}
+	if repos[0].Path != repoPath {
+		t.Fatalf("expected path %q, got %q", repoPath, repos[0].Path)
 	}
 }

@@ -11,7 +11,7 @@ import (
 
 func TestNewRouterListRepositories(t *testing.T) {
     tempDir := t.TempDir()
-    r := NewRouter(tempDir, nil)
+    r := NewRouter(tempDir, nil, nil)
 
     req := httptest.NewRequest(http.MethodGet, "/api/repos", nil)
     rr := httptest.NewRecorder()
