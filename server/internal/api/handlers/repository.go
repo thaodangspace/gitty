@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -957,6 +958,64 @@ func (h *RepositoryHandler) HandleTokenizedCommitDiff(w http.ResponseWriter, r *
 	tokenizedDiff, err := h.gitService.TokenizeCommitDiff(repo.Path, hash)
 	if err != nil {
 		http.Error(w, "Failed to get tokenized commit diff: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(tokenizedDiff)
+}
+
+// HandleCommitFileDiff returns a tokenized diff for a specific file at a specific commit
+// GET /api/repos/{id}/diff/commit/{hash}/files/{path}?cursor=<int>&limit=<int>
+func (h *RepositoryHandler) HandleCommitFileDiff(w http.ResponseWriter, r *http.Request) {
+	repoID := chi.URLParam(r, "id")
+	commitHash := chi.URLParam(r, "hash")
+
+	h.mu.RLock()
+	repo, exists := h.repositories[repoID]
+	h.mu.RUnlock()
+
+	if !exists {
+		http.Error(w, "Repository not found", http.StatusNotFound)
+		return
+	}
+
+	// Get file path from URL wildcard
+	filePath := chi.URLParam(r, "*")
+	decodedPath, err := url.PathUnescape(filePath)
+	if err != nil {
+		decodedPath = filePath // fallback to original if decoding fails
+	}
+
+	if decodedPath == "" {
+		http.Error(w, "File path is required", http.StatusBadRequest)
+		return
+	}
+
+	if commitHash == "" {
+		http.Error(w, "Commit hash is required", http.StatusBadRequest)
+		return
+	}
+
+	// Parse pagination args
+	cursor := parseQueryInt(r, "cursor", 0)
+	limit := parseQueryInt(r, "limit", 50)
+
+	tokenizedDiff, err := h.gitService.GetCommitFileDiff(repo.Path, commitHash, decodedPath, cursor, limit)
+	if err != nil {
+		// Determine appropriate status code
+		status := http.StatusInternalServerError
+		msg := "Failed to get commit file diff: " + err.Error()
+
+		if strings.Contains(err.Error(), "commit not found") {
+			status = http.StatusNotFound
+			msg = "Commit not found"
+		} else if strings.Contains(err.Error(), "file not found") {
+			status = http.StatusNotFound
+			msg = "File not found in this commit"
+		}
+
+		http.Error(w, msg, status)
 		return
 	}
 
