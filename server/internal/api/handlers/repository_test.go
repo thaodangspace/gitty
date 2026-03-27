@@ -644,6 +644,36 @@ func TestGetRepositoryStatus_NotBlockedWhenGovernorDegraded(t *testing.T) {
 	}
 }
 
+func TestGetFileDiff_Returns503WhenGovernorRejects(t *testing.T) {
+	tempDir := t.TempDir()
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	repoDir, err := createTestRepository(handler, "test-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(repoDir, "README.md"), []byte("# Updated"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled: true,
+	})
+	handler.governor.UpdatePressure(1)
+
+	req := httptest.NewRequest("GET", "/repositories/test-repo/diff/README.md", nil)
+	w := httptest.NewRecorder()
+
+	chiCtx := chi.NewRouteContext()
+	chiCtx.URLParams.Add("id", "test-repo")
+	chiCtx.URLParams.Add("*", "README.md")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+
+	handler.GetFileDiff(w, req)
+
+	assertExpensiveRequestRejected(t, w, resources.ReasonDegradedMode)
+}
+
 func TestGetBranches(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "handler_test")
 	if err != nil {
@@ -1537,4 +1567,72 @@ func TestHandleTokenizedFileDiff_Returns503WhenSaturated(t *testing.T) {
 	handler.HandleTokenizedFileDiff(w, req)
 
 	assertExpensiveRequestRejected(t, w, resources.ReasonExpensiveLimitReached)
+}
+
+func TestHandleTokenizedCommitDiff_Returns503WhenGovernorRejects(t *testing.T) {
+	tempDir := t.TempDir()
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	repoDir, err := createTestRepository(handler, "test-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	commits, err := handler.gitService.GetCommitHistory(repoDir, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) == 0 {
+		t.Fatal("expected at least one commit")
+	}
+
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled: true,
+	})
+	handler.governor.UpdatePressure(1)
+
+	req := httptest.NewRequest("GET", "/repositories/test-repo/diff/commit/tokenized?hash="+commits[0].Hash, nil)
+	w := httptest.NewRecorder()
+
+	chiCtx := chi.NewRouteContext()
+	chiCtx.URLParams.Add("id", "test-repo")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+
+	handler.HandleTokenizedCommitDiff(w, req)
+
+	assertExpensiveRequestRejected(t, w, resources.ReasonDegradedMode)
+}
+
+func TestHandleCommitFileDiff_Returns503WhenGovernorRejects(t *testing.T) {
+	tempDir := t.TempDir()
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	repoDir, err := createTestRepository(handler, "test-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	commits, err := handler.gitService.GetCommitHistory(repoDir, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) == 0 {
+		t.Fatal("expected at least one commit")
+	}
+
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled: true,
+	})
+	handler.governor.UpdatePressure(1)
+
+	req := httptest.NewRequest("GET", "/repositories/test-repo/diff/commit/"+commits[0].Hash+"/files/README.md", nil)
+	w := httptest.NewRecorder()
+
+	chiCtx := chi.NewRouteContext()
+	chiCtx.URLParams.Add("id", "test-repo")
+	chiCtx.URLParams.Add("hash", commits[0].Hash)
+	chiCtx.URLParams.Add("*", "README.md")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+
+	handler.HandleCommitFileDiff(w, req)
+
+	assertExpensiveRequestRejected(t, w, resources.ReasonDegradedMode)
 }
