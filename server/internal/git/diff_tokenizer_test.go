@@ -1,6 +1,7 @@
 package git
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -613,6 +614,52 @@ func TestTokenizeDiffFromPatch_UsesOptimizedGitDiff(t *testing.T) {
 	}
 	if result.Deletions == 0 {
 		t.Error("Expected deletions count > 0")
+	}
+}
+
+func TestTokenizeDiff_LargeFile_PlainTextFallback(t *testing.T) {
+	// Build a diff with more than maxTokenizeLines (1000) combined code lines.
+	// Use 600 added lines + 600 deleted lines = 1200 combined > 1000.
+	var sb strings.Builder
+	sb.WriteString("diff --git a/big.go b/big.go\n")
+	sb.WriteString("--- a/big.go\n")
+	sb.WriteString("+++ b/big.go\n")
+	sb.WriteString("@@ -1,600 +1,600 @@\n")
+	for i := 0; i < 600; i++ {
+		sb.WriteString(fmt.Sprintf("-old line %d with keywords func var if else\n", i))
+	}
+	for i := 0; i < 600; i++ {
+		sb.WriteString(fmt.Sprintf("+new line %d with keywords func var if else\n", i))
+	}
+
+	service := NewService()
+	result := service.TokenizeDiff(sb.String(), "big.go", 0, 9999)
+
+	if result == nil {
+		t.Fatal("Expected non-nil result")
+	}
+	if result.Additions != 600 {
+		t.Fatalf("Expected 600 additions, got %d", result.Additions)
+	}
+	if result.Deletions != 600 {
+		t.Fatalf("Expected 600 deletions, got %d", result.Deletions)
+	}
+
+	// Every line must be a single token with the default color (plain text).
+	// If Chroma ran, Go keywords like "func", "var", "if", "else" would be
+	// split into colored tokens.
+	for _, hunk := range result.Hunks {
+		for _, block := range hunk.Blocks {
+			for _, line := range block.Lines {
+				if len(line.Tokens) != 1 {
+					t.Fatalf("Expected 1 plain-text token per line, got %d tokens on line %v",
+						len(line.Tokens), line.Tokens)
+				}
+				if line.Tokens[0].Color != defaultColor {
+					t.Errorf("Expected plain-text color %q, got %q", defaultColor, line.Tokens[0].Color)
+				}
+			}
+		}
 	}
 }
 

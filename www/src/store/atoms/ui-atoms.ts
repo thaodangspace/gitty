@@ -9,7 +9,7 @@ export const sidebarOpenAtom = atom<boolean>(true);
 export const sidebarWidthAtom = atom<number>(280);
 
 // View state
-export const activeViewAtom = atom<ActiveView>('files');
+export const activeViewAtom = atom<ActiveView>('status');
 export const themeAtom = atom<Theme>('system');
 
 // File selection and search

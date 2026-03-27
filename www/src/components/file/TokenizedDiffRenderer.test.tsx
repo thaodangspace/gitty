@@ -96,6 +96,16 @@ describe('TokenizedDiffRenderer', () => {
     expect(screen.getByText('const z = 3;')).toBeInTheDocument();
   });
 
+  it('renders a single line number column per row', () => {
+    render(<TokenizedDiffRenderer diff={mockDiff} />);
+
+    const addedRow = screen.getByText('const y = 2;').closest('.flex');
+    const deletedRow = screen.getByText('const z = 3;').closest('.flex');
+
+    expect(addedRow?.querySelectorAll('.w-12')).toHaveLength(1);
+    expect(deletedRow?.querySelectorAll('.w-12')).toHaveLength(1);
+  });
+
   it('applies correct background colors for line types', () => {
     render(<TokenizedDiffRenderer diff={mockDiff} />);
 
@@ -148,13 +158,12 @@ describe('TokenizedDiffRenderer', () => {
     };
 
     render(<TokenizedDiffRenderer diff={diffWithEmptyTokens} />);
-    // Should render without crashing and show line numbers
-    // Note: there are two "1" elements (old and new line numbers), so use getAllByText
+    // Should render without crashing and show at least one line number.
     const lineNumbers = screen.getAllByText('1');
     expect(lineNumbers.length).toBeGreaterThan(0);
   });
 
-  it('displays line number 0 correctly (not as dash)', () => {
+  it('displays line number 0 correctly (not as dash) for the active column', () => {
     const diffWithZeroLineNum: TokenizedDiff = {
       filename: 'test.ts',
       hunks: [
@@ -162,26 +171,25 @@ describe('TokenizedDiffRenderer', () => {
           header: '@@ -0,0 +1,1 @@',
           blocks: [
             {
-              type: 'added',
+              type: 'deleted',
               lines: [
                 {
-                  type: 'added',
-                  tokens: [{ text: 'new line', color: '#98C379' }],
+                  type: 'deleted',
+                  tokens: [{ text: 'old line', color: '#E06C75' }],
                   oldNum: 0,
-                  newNum: 1,
                 },
               ],
               startOld: 0,
               endOld: 0,
-              startNew: 1,
-              endNew: 1,
+              startNew: 0,
+              endNew: 0,
               collapsed: false,
             },
           ],
         },
       ],
-      additions: 1,
-      deletions: 0,
+      additions: 0,
+      deletions: 1,
       has_more: false,
       total_hunks: 1,
     };

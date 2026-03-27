@@ -11,8 +11,9 @@ import {
   Plus,
   Minus,
   FileText,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import DiffViewer from "@/components/file/DiffViewer";
+import InlineDiffViewer from "@/components/file/InlineDiffViewer";
 
 interface CommitDetailsDialogProps {
   commitHash: string | null;
@@ -39,10 +40,7 @@ export default function CommitDetailsDialog({
     isLoading,
     error,
   } = useCommitDetails(currentRepository?.id, commitHash || undefined);
-  const [selectedDiffFile, setSelectedDiffFile] = useState<{
-    path: string;
-    name: string;
-  } | null>(null);
+  const [expandedFilePath, setExpandedFilePath] = useState<string | null>(null);
 
   const getChangeTypeColor = (changeType: string) => {
     switch (changeType) {
@@ -70,9 +68,10 @@ export default function CommitDetailsDialog({
     }
   };
 
-  const handleViewDiff = (filePath: string) => {
-    const fileName = filePath.split("/").pop() || filePath;
-    setSelectedDiffFile({ path: filePath, name: fileName });
+  const handleFileClick = (filePath: string) => {
+    setExpandedFilePath((current) =>
+      current === filePath ? null : filePath
+    );
   };
 
   return (
@@ -188,65 +187,76 @@ export default function CommitDetailsDialog({
                 Files Changed ({commitDetails.changes.length})
               </h4>
 
-              <div className="space-y-4">
-                {commitDetails.changes.map((change, index) => (
-                  <div
-                    key={index}
-                    className="border rounded-lg overflow-hidden"
-                  >
-                    <div className="flex items-center justify-between p-4 bg-muted/30 border-b">
-                      <div className="flex items-center gap-3">
-                        <Badge
-                          variant="outline"
-                          className={`${getChangeTypeColor(change.change_type)} font-mono text-xs`}
-                        >
-                          {getChangeTypeIcon(change.change_type)}
-                          {change.change_type}
-                        </Badge>
-                        <span className="font-mono text-sm">{change.path}</span>
-                      </div>
-{(change.additions > 0 || change.deletions > 0) && (
-                         <div className="flex items-center gap-2 text-xs">
-                           {change.additions > 0 && (
-                             <span className="text-green-600">
-                               +{change.additions}
-                             </span>
-                           )}
-                           {change.deletions > 0 && (
-                             <span className="text-red-600">
-                               -{change.deletions}
-                             </span>
-                           )}
-                           <Button
-                             variant="ghost"
-                             size="sm"
-                             onClick={() => handleViewDiff(change.path)}
-                             className="px-2 text-muted-foreground hover:text-foreground ml-1"
-                             title="View full diff"
-                           >
-                             <FileText className="h-3 w-3" />
-                           </Button>
-                         </div>
-                       )}
-                      </div>
+              <div className="space-y-2">
+                {commitDetails.changes.map((change) => {
+                  const isExpanded = expandedFilePath === change.path;
+                  return (
+                    <div
+                      key={change.path}
+                      className={`border rounded-lg overflow-hidden ${
+                        isExpanded ? "ring-1 ring-primary/20" : ""
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        aria-expanded={isExpanded}
+                        onClick={() => handleFileClick(change.path)}
+                        className={`w-full flex items-center justify-between p-4 text-left transition-colors ${
+                          isExpanded
+                            ? "bg-muted/50 border-b"
+                            : "bg-muted/30 hover:bg-muted/50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <Badge
+                            variant="outline"
+                            className={`${getChangeTypeColor(change.change_type)} font-mono text-xs flex-shrink-0`}
+                          >
+                            {getChangeTypeIcon(change.change_type)}
+                            {change.change_type}
+                          </Badge>
+                          <span className="font-mono text-sm truncate">
+                            {change.path}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0 ml-2">
+                          {(change.additions > 0 || change.deletions > 0) && (
+                            <div className="flex items-center gap-2 text-xs">
+                              {change.additions > 0 && (
+                                <span className="text-green-600">
+                                  +{change.additions}
+                                </span>
+                              )}
+                              {change.deletions > 0 && (
+                                <span className="text-red-600">
+                                  -{change.deletions}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {isExpanded ? (
+                            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </div>
+                      </button>
 
-{/* File change without inline patch preview - click button to view full diff */}
-                  </div>
-                ))}
+                      {isExpanded && currentRepository && (
+                        <div className="border-t">
+                          <InlineDiffViewer
+                            repositoryId={currentRepository.id}
+                            filePath={change.path}
+                            commitHash={commitDetails.hash}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
-        )}
-
-        {/* Diff Viewer */}
-        {selectedDiffFile && currentRepository && (
-          <DiffViewer
-            repositoryId={currentRepository.id}
-            filePath={selectedDiffFile.path}
-            fileName={selectedDiffFile.name}
-            onClose={() => setSelectedDiffFile(null)}
-            commitHash={commitHash}
-          />
         )}
       </DialogContent>
     </Dialog>

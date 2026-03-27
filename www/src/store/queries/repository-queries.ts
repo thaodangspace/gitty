@@ -39,8 +39,6 @@ export const useRepositoryStatus = (id: string | undefined) => {
         queryKey: repositoryStatusKey(id),
         queryFn: () => apiClient.getRepositoryStatus(id!),
         enabled: !!id,
-        refetchInterval: 5000, // Poll every 5 seconds
-        refetchIntervalInBackground: false,
         retry: true,
         retryDelay: 1000,
     });

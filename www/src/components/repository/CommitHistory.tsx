@@ -156,6 +156,7 @@ export default function CommitHistory() {
                     {commits.map((commit, index) => (
                         <div
                             key={commit.hash}
+                            onClick={() => setSelectedCommitHash(commit.hash)}
                             className={`border rounded-lg p-4 hover:bg-muted/50 transition-colors cursor-pointer ${
                                 isVimActive && currentIndex === index ? 'ring-2 ring-blue-500 bg-blue-50/50' : ''
                             }`}
@@ -191,11 +192,14 @@ export default function CommitHistory() {
                                                 <Hash className="h-3 w-3" />
                                                 <span>{commit.hash.substring(0, 7)}</span>
                                             </div>
-                                            <Button 
-                                                variant="ghost" 
-                                                size="sm" 
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
                                                 className="h-6 px-2"
-                                                onClick={() => setSelectedCommitHash(commit.hash)}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedCommitHash(commit.hash);
+                                                }}
                                             >
                                                 View
                                             </Button>

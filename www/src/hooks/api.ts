@@ -53,7 +53,6 @@ export const useRepositoryStatus = (id: string) => {
         queryKey: queryKeys.repositoryStatus(id),
         queryFn: () => apiClient.getRepositoryStatus(id),
         enabled: !!id,
-        refetchInterval: 5000, // Refetch every 5 seconds for live updates
     });
 };
 

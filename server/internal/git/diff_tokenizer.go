@@ -265,6 +265,10 @@ func tokenizeFullSource(lexer chroma.Lexer, lines []string) [][]models.Token {
 
 const collapseThreshold = 6
 
+// maxTokenizeLines is the combined old+new code line count above which
+// syntax highlighting is skipped to avoid CPU spikes on large diffs.
+const maxTokenizeLines = 1000
+
 // flushBlock appends the current block to the hunk and handles collapse logic.
 // Returns nil to clear the block pointer.
 func flushBlock(block *models.DiffBlock, hunk *models.DiffHunkTokenized) *models.DiffBlock {
@@ -562,19 +566,27 @@ func (s *Service) TokenizeDiff(diffText string, filename string, cursor int, lim
 		}
 	}
 
-	// Tokenize both sides
-	oldTokenized := tokenizeFullSource(lexer, oldCodeLines)
-	newTokenized := tokenizeFullSource(lexer, newCodeLines)
-
-	// Build lookup: parsedIndex → tokens
+	// Build lookup: parsedIndex → tokens.
+	// Skip Chroma tokenization for large diffs to avoid CPU spikes.
 	tokenMap := make(map[int][]models.Token)
-	for i, idx := range oldIndices {
-		tokenMap[idx] = oldTokenized[i]
-	}
-	for i, idx := range newIndices {
-		// For context lines, both sides should produce the same tokens,
-		// so overwriting is fine.
-		tokenMap[idx] = newTokenized[i]
+	if len(oldCodeLines)+len(newCodeLines) > maxTokenizeLines {
+		// Plain-text fast path: one token per line, no syntax highlighting.
+		for i, dl := range parsed {
+			if dl.lineType != "header" {
+				tokenMap[i] = []models.Token{{Text: dl.content, Color: defaultColor}}
+			}
+		}
+	} else {
+		// Tokenize both sides with Chroma for syntax highlighting.
+		oldTokenized := tokenizeFullSource(lexer, oldCodeLines)
+		newTokenized := tokenizeFullSource(lexer, newCodeLines)
+		for i, idx := range oldIndices {
+			tokenMap[idx] = oldTokenized[i]
+		}
+		for i, idx := range newIndices {
+			// For context lines, both sides produce the same tokens; overwriting is fine.
+			tokenMap[idx] = newTokenized[i]
+		}
 	}
 
 	// Build the output with block grouping

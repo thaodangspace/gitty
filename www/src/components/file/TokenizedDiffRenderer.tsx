@@ -117,15 +117,24 @@ function DiffLine({ line, type }: DiffLineProps) {
     context: ' ',
   }[type];
 
+  const lineNumber = (() => {
+    if (type === 'added') return line.newNum;
+    if (type === 'deleted') return line.oldNum;
+    return line.newNum !== undefined ? line.newNum : line.oldNum;
+  })();
+
+  const lineNumberColor = {
+    added: 'text-green-600 dark:text-green-400',
+    deleted: 'text-red-600 dark:text-red-400',
+    context: 'text-gray-400',
+  }[type];
+
   // Handle empty tokens array
   if (!line.tokens || line.tokens.length === 0) {
     return (
       <div style={lineStyle} className="flex hover:bg-gray-100 dark:hover:bg-gray-800">
-        <div className="w-12 text-right pr-2 text-gray-400 select-none">
-          {line.oldNum !== undefined ? line.oldNum : '-'}
-        </div>
-        <div className="w-12 text-right pr-2 text-gray-400 select-none">
-          {line.newNum !== undefined ? line.newNum : '-'}
+        <div className={`w-12 text-right pr-2 select-none ${lineNumberColor}`}>
+          {lineNumber !== undefined ? lineNumber : '-'}
         </div>
         <div className="flex-1 px-2 py-0.5">
           <span className="text-gray-400">{prefix}</span>
@@ -136,13 +145,9 @@ function DiffLine({ line, type }: DiffLineProps) {
 
   return (
     <div style={lineStyle} className="flex hover:bg-gray-100 dark:hover:bg-gray-800">
-      {/* Old line number */}
-      <div className="w-12 text-right pr-2 text-gray-400 select-none">
-        {line.oldNum !== undefined ? line.oldNum : '-'}
-      </div>
-      {/* New line number */}
-      <div className="w-12 text-right pr-2 text-gray-400 select-none">
-        {line.newNum !== undefined ? line.newNum : '-'}
+      {/* Single line number column */}
+      <div className={`w-12 text-right pr-2 select-none ${lineNumberColor}`}>
+        {lineNumber !== undefined ? lineNumber : '-'}
       </div>
       {/* Line content with tokens */}
       <div className="flex-1 px-2 py-0.5 whitespace-pre overflow-x-auto">
