@@ -81,17 +81,10 @@ export default function CommitDetailsContent({ commitHash }: CommitDetailsConten
 
   if (error) {
     return (
-      <div className="p-8 flex flex-col items-center justify-center gap-4">
+      <div className="p-8 flex items-center justify-center">
         <div className="text-red-600">
           Error loading commit details: {error.message}
         </div>
-        <button
-          type="button"
-          onClick={() => setExpandedFilePath(null)}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-        >
-          Go Back
-        </button>
       </div>
     );
   }
