@@ -14,6 +14,7 @@ import (
 	"gitweb/server/internal/auth"
 	"gitweb/server/internal/config"
 	"gitweb/server/internal/registry"
+	"gitweb/server/internal/resources"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -37,6 +38,12 @@ func main() {
 		log.Printf("Warning: Failed to load config: %v", err)
 		cfg = &config.Config{}
 	}
+
+	caps, err := resources.ApplyRuntimeCaps(resources.FromAppConfig(cfg))
+	if err != nil {
+		log.Fatalf("Invalid resource governor config: %v", err)
+	}
+	log.Printf("Resource caps applied: memory=%d gomaxprocs=%d", caps.MemoryLimitBytes, caps.GOMAXPROCS)
 
 	// Set master password from environment variable if provided (takes precedence over config)
 	if masterPassword != "" {
