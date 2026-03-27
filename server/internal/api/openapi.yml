@@ -537,6 +537,7 @@ paths:
           required: true
           schema:
             type: string
+          description: Nested paths must be URL-encoded because chi treats this as a wildcard path segment.
       responses:
         '200':
           description: File diff
