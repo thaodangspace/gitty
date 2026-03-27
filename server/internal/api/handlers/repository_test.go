@@ -1371,6 +1371,11 @@ func TestRepositorySettingsHandlers_BadPayload(t *testing.T) {
 			method: handler.UpdateRepositorySettingsCommit,
 			req:    newRepoSettingsRequest(http.MethodPut, "/api/repos/"+repoName+"/settings/commit", repoName, []byte(`{"defaultBranch":"","signingEnabled":false,"lineEndings":"tabs"}`)),
 		},
+		{
+			name:   "identity unknown field",
+			method: handler.UpdateRepositorySettingsIdentity,
+			req:    newRepoSettingsRequest(http.MethodPut, "/api/repos/"+repoName+"/settings/identity", repoName, []byte(`{"name":"Valid","email":"valid@example.com","extra":"nope"}`)),
+		},
 	}
 
 	for _, tt := range tests {

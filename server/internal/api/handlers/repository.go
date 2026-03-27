@@ -30,6 +30,7 @@ type repoAppSettings struct {
 
 type RepositoryHandler struct {
 	mu            sync.RWMutex
+	settingsMu    sync.Mutex
 	gitService    *git.Service
 	repositories  map[string]*models.Repository
 	dataPath      string
@@ -966,6 +967,36 @@ func (h *RepositoryHandler) saveRepoAppSettings(repoID string, settings repoAppS
 		return fmt.Errorf("replace settings file: %w", err)
 	}
 
+	// Ensure the directory entry update is durable.
+	dir, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("open settings directory for sync: %w", err)
+	}
+	defer dir.Close()
+	if err := dir.Sync(); err != nil {
+		return fmt.Errorf("sync settings directory: %w", err)
+	}
+
+	return nil
+}
+
+func decodeStrictJSON(r io.Reader, dst any) error {
+	dec := json.NewDecoder(r)
+	dec.DisallowUnknownFields()
+
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+
+	if dec.More() {
+		return fmt.Errorf("request body must contain a single JSON object")
+	}
+
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		return fmt.Errorf("request body must contain a single JSON object")
+	}
+
 	return nil
 }
 
@@ -1076,7 +1107,7 @@ func (h *RepositoryHandler) UpdateRepositorySettingsIdentity(w http.ResponseWrit
 	}
 
 	var req models.RepoIdentitySettings
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeStrictJSON(r.Body, &req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
@@ -1106,7 +1137,7 @@ func (h *RepositoryHandler) UpdateRepositorySettingsSync(w http.ResponseWriter, 
 	}
 
 	var req models.RepoSyncSettings
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeStrictJSON(r.Body, &req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
@@ -1115,6 +1146,9 @@ func (h *RepositoryHandler) UpdateRepositorySettingsSync(w http.ResponseWriter, 
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	h.settingsMu.Lock()
+	defer h.settingsMu.Unlock()
 
 	settings, err := h.loadRepoAppSettings(repoID)
 	if err != nil {
@@ -1141,7 +1175,7 @@ func (h *RepositoryHandler) UpdateRepositorySettingsCommit(w http.ResponseWriter
 	}
 
 	var req models.RepoCommitSettings
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeStrictJSON(r.Body, &req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
@@ -1151,6 +1185,9 @@ func (h *RepositoryHandler) UpdateRepositorySettingsCommit(w http.ResponseWriter
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	h.settingsMu.Lock()
+	defer h.settingsMu.Unlock()
 
 	settings, err := h.loadRepoAppSettings(repoID)
 	if err != nil {

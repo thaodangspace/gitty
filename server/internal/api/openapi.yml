@@ -137,6 +137,8 @@ paths:
                 $ref: '#/components/schemas/RepositorySettings'
         '404':
           description: Repository not found
+        '500':
+          description: Internal server error
 
   /api/repos/{id}/settings/identity:
     put:
@@ -163,6 +165,8 @@ paths:
           description: Invalid request
         '404':
           description: Repository not found
+        '500':
+          description: Internal server error
 
   /api/repos/{id}/settings/sync:
     put:
@@ -189,6 +193,8 @@ paths:
           description: Invalid request
         '404':
           description: Repository not found
+        '500':
+          description: Internal server error
 
   /api/repos/{id}/settings/commit:
     put:
@@ -215,6 +221,8 @@ paths:
           description: Invalid request
         '404':
           description: Repository not found
+        '500':
+          description: Internal server error
 
   /api/repos/{id}/status:
     get:
