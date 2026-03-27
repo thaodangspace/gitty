@@ -10,6 +10,36 @@ import (
 	"gitweb/server/internal/models"
 )
 
+func containsFileChangePath(changes []models.FileChange, path string) bool {
+	for _, change := range changes {
+		if change.Path == path {
+			return true
+		}
+	}
+
+	return false
+}
+
+func containsFileChangeStatus(changes []models.FileChange, status string) bool {
+	for _, change := range changes {
+		if change.Status == status {
+			return true
+		}
+	}
+
+	return false
+}
+
+func containsString(values []string, value string) bool {
+	for _, current := range values {
+		if current == value {
+			return true
+		}
+	}
+
+	return false
+}
+
 func TestNewService(t *testing.T) {
 	service := NewService()
 	if service == nil {
@@ -451,6 +481,14 @@ func TestStageAndUnstageFile(t *testing.T) {
 		t.Error("File should be untracked initially")
 	}
 
+	if containsFileChangeStatus(status.Staged, "?") {
+		t.Error("Untracked file should not appear in staged entries with status '?'")
+	}
+
+	if containsFileChangePath(status.Staged, filePath) {
+		t.Error("Untracked file should not appear in staged entries")
+	}
+
 	// Stage the file
 	err = service.StageFile(tempDir, filePath)
 	if err != nil {
@@ -484,6 +522,80 @@ func TestStageAndUnstageFile(t *testing.T) {
 	// For now, just check that it's not in staged
 	if len(status.Staged) != 0 {
 		t.Error("File should not be staged after unstaging")
+	}
+}
+
+func TestGetRepositoryStatus_StrictNormalization(t *testing.T) {
+	service := NewService()
+
+	tempDir, err := os.MkdirTemp("", "git_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	_, err = service.InitRepository(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	trackedPath := "README.md"
+	initialContent := []byte("# Test Repository")
+	err = service.SaveFileContent(tempDir, trackedPath, initialContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = service.StageFile(tempDir, trackedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	commitReq := models.CommitRequest{
+		Message: "Initial commit",
+		Files:   []string{trackedPath},
+		Author: models.Author{
+			Name:  "Test User",
+			Email: "test@example.com",
+		},
+	}
+
+	err = service.CreateCommit(tempDir, commitReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	untrackedPath := "untracked.txt"
+	err = service.SaveFileContent(tempDir, untrackedPath, []byte("new file"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updatedTrackedContent := []byte("# Test Repository\nupdated")
+	err = service.SaveFileContent(tempDir, trackedPath, updatedTrackedContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := service.GetRepositoryStatus(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !containsString(status.Untracked, untrackedPath) {
+		t.Errorf("Expected %s to be reported as untracked", untrackedPath)
+	}
+
+	if containsFileChangeStatus(status.Staged, "?") {
+		t.Error("Untracked files should not appear in staged entries with status '?'")
+	}
+
+	if containsFileChangePath(status.Staged, untrackedPath) {
+		t.Error("Untracked file should not appear in staged entries")
+	}
+
+	if !containsFileChangePath(status.Modified, trackedPath) {
+		t.Errorf("Expected %s to be reported as modified", trackedPath)
 	}
 }
 
