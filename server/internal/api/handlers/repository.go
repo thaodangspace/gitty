@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,6 +23,11 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+type repoAppSettings struct {
+	Sync   models.RepoSyncSettings   `json:"sync"`
+	Commit models.RepoCommitSettings `json:"commit"`
+}
+
 type RepositoryHandler struct {
 	mu            sync.RWMutex
 	gitService    *git.Service
@@ -31,6 +37,21 @@ type RepositoryHandler struct {
 	config        *config.Config
 	claudeService *services.ClaudeService
 	registry      *registry.Registry
+}
+
+func defaultRepoAppSettings() repoAppSettings {
+	return repoAppSettings{
+		Sync: models.RepoSyncSettings{
+			AutoFetch:            false,
+			FetchIntervalMinutes: 15,
+			PullStrategy:         "merge",
+		},
+		Commit: models.RepoCommitSettings{
+			DefaultBranch:  "main",
+			SigningEnabled: false,
+			LineEndings:    "lf",
+		},
+	}
 }
 
 func NewRepositoryHandler(dataPath string, cfg *config.Config, reg *registry.Registry) *RepositoryHandler {
@@ -871,12 +892,285 @@ func (h *RepositoryHandler) GenerateCommitMessage(w http.ResponseWriter, r *http
 	})
 }
 
-func (h *RepositoryHandler) GetGitConfig(w http.ResponseWriter, r *http.Request) {
-	repoID := chi.URLParam(r, "id")
-
+func (h *RepositoryHandler) repositoryByID(repoID string) (*models.Repository, bool) {
 	h.mu.RLock()
 	repo, exists := h.repositories[repoID]
 	h.mu.RUnlock()
+	return repo, exists
+}
+
+func (h *RepositoryHandler) settingsFilePath(repoID string) string {
+	return filepath.Join(h.dataPath, "settings", repoID+".json")
+}
+
+func (h *RepositoryHandler) loadRepoAppSettings(repoID string) (repoAppSettings, error) {
+	settings := defaultRepoAppSettings()
+	path := h.settingsFilePath(repoID)
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return settings, nil
+		}
+		return repoAppSettings{}, fmt.Errorf("read settings file: %w", err)
+	}
+
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return repoAppSettings{}, fmt.Errorf("decode settings file: %w", err)
+	}
+
+	if settings.Sync.FetchIntervalMinutes == 0 {
+		settings.Sync.FetchIntervalMinutes = 15
+	}
+	if settings.Sync.PullStrategy == "" {
+		settings.Sync.PullStrategy = "merge"
+	}
+	if settings.Commit.DefaultBranch == "" {
+		settings.Commit.DefaultBranch = "main"
+	}
+	if settings.Commit.LineEndings == "" {
+		settings.Commit.LineEndings = "lf"
+	}
+
+	return settings, nil
+}
+
+func (h *RepositoryHandler) saveRepoAppSettings(repoID string, settings repoAppSettings) error {
+	path := h.settingsFilePath(repoID)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return fmt.Errorf("create settings directory: %w", err)
+	}
+
+	tmpFile, err := os.CreateTemp(filepath.Dir(path), repoID+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp settings file: %w", err)
+	}
+	tmpName := tmpFile.Name()
+	defer os.Remove(tmpName)
+
+	encoder := json.NewEncoder(tmpFile)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(settings); err != nil {
+		return fmt.Errorf("encode settings file: %w", err)
+	}
+
+	if err := tmpFile.Sync(); err != nil {
+		return fmt.Errorf("sync settings file: %w", err)
+	}
+
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("close temp settings file: %w", err)
+	}
+
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("replace settings file: %w", err)
+	}
+
+	return nil
+}
+
+func validateIdentitySettings(identity models.RepoIdentitySettings) error {
+	identity.Name = strings.TrimSpace(identity.Name)
+	identity.Email = strings.TrimSpace(identity.Email)
+
+	if identity.Name == "" {
+		return fmt.Errorf("identity name is required")
+	}
+	if !isBasicEmail(identity.Email) {
+		return fmt.Errorf("identity email is invalid")
+	}
+	return nil
+}
+
+func validateSyncSettings(sync models.RepoSyncSettings) error {
+	if sync.FetchIntervalMinutes != 5 && sync.FetchIntervalMinutes != 15 && sync.FetchIntervalMinutes != 30 && sync.FetchIntervalMinutes != 60 {
+		return fmt.Errorf("sync.fetchIntervalMinutes must be one of 5, 15, 30, or 60")
+	}
+	switch sync.PullStrategy {
+	case "merge", "rebase", "fast-forward":
+	default:
+		return fmt.Errorf("sync.pullStrategy must be one of merge, rebase, or fast-forward")
+	}
+	return nil
+}
+
+func validateCommitSettings(commit models.RepoCommitSettings) error {
+	commit.DefaultBranch = strings.TrimSpace(commit.DefaultBranch)
+	if commit.DefaultBranch == "" {
+		return fmt.Errorf("commit.defaultBranch is required")
+	}
+	switch commit.LineEndings {
+	case "lf", "crlf", "auto":
+	default:
+		return fmt.Errorf("commit.lineEndings must be one of lf, crlf, or auto")
+	}
+	return nil
+}
+
+func isBasicEmail(email string) bool {
+	at := strings.Index(email, "@")
+	if at <= 0 || at == len(email)-1 {
+		return false
+	}
+
+	domain := email[at+1:]
+	if strings.HasPrefix(domain, ".") || !strings.Contains(domain, ".") {
+		return false
+	}
+
+	return true
+}
+
+func writeNoContent(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *RepositoryHandler) GetRepositorySettings(w http.ResponseWriter, r *http.Request) {
+	repoID := chi.URLParam(r, "id")
+
+	repo, exists := h.repositoryByID(repoID)
+	if !exists {
+		http.Error(w, "Repository not found", http.StatusNotFound)
+		return
+	}
+
+	identity, err := h.gitService.GetGitConfig(repo.Path)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get git config: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	settings, err := h.loadRepoAppSettings(repoID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to load repository settings: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	remotes, err := h.gitService.GetRemotes(repo.Path)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get remotes: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	response := models.RepoSettings{
+		Identity: models.RepoIdentitySettings{
+			Name:  identity.Name,
+			Email: identity.Email,
+		},
+		Sync:    settings.Sync,
+		Commit:  settings.Commit,
+		Remotes: remotes,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (h *RepositoryHandler) UpdateRepositorySettingsIdentity(w http.ResponseWriter, r *http.Request) {
+	repoID := chi.URLParam(r, "id")
+
+	repo, exists := h.repositoryByID(repoID)
+	if !exists {
+		http.Error(w, "Repository not found", http.StatusNotFound)
+		return
+	}
+
+	var req models.RepoIdentitySettings
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	req.Email = strings.TrimSpace(req.Email)
+	if err := validateIdentitySettings(req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.gitService.SetGitConfigIdentity(repo.Path, req.Name, req.Email); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to update git config: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	writeNoContent(w)
+}
+
+func (h *RepositoryHandler) UpdateRepositorySettingsSync(w http.ResponseWriter, r *http.Request) {
+	repoID := chi.URLParam(r, "id")
+
+	_, exists := h.repositoryByID(repoID)
+	if !exists {
+		http.Error(w, "Repository not found", http.StatusNotFound)
+		return
+	}
+
+	var req models.RepoSyncSettings
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if err := validateSyncSettings(req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	settings, err := h.loadRepoAppSettings(repoID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to load repository settings: %v", err), http.StatusInternalServerError)
+		return
+	}
+	settings.Sync = req
+
+	if err := h.saveRepoAppSettings(repoID, settings); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to save repository settings: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	writeNoContent(w)
+}
+
+func (h *RepositoryHandler) UpdateRepositorySettingsCommit(w http.ResponseWriter, r *http.Request) {
+	repoID := chi.URLParam(r, "id")
+
+	_, exists := h.repositoryByID(repoID)
+	if !exists {
+		http.Error(w, "Repository not found", http.StatusNotFound)
+		return
+	}
+
+	var req models.RepoCommitSettings
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	req.DefaultBranch = strings.TrimSpace(req.DefaultBranch)
+	if err := validateCommitSettings(req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	settings, err := h.loadRepoAppSettings(repoID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to load repository settings: %v", err), http.StatusInternalServerError)
+		return
+	}
+	settings.Commit = req
+
+	if err := h.saveRepoAppSettings(repoID, settings); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to save repository settings: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	writeNoContent(w)
+}
+
+func (h *RepositoryHandler) GetGitConfig(w http.ResponseWriter, r *http.Request) {
+	repoID := chi.URLParam(r, "id")
+
+	repo, exists := h.repositoryByID(repoID)
 
 	if !exists {
 		http.Error(w, "Repository not found", http.StatusNotFound)
@@ -920,7 +1214,7 @@ func (h *RepositoryHandler) HandleTokenizedFileDiff(w http.ResponseWriter, r *ht
 	}
 
 	staged := r.URL.Query().Get("staged") == "true"
-	
+
 	// Parse pagination args
 	cursor := parseQueryInt(r, "cursor", 0)
 	limit := parseQueryInt(r, "limit", 50)

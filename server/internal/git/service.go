@@ -1202,6 +1202,54 @@ func (s *Service) GetGitConfig(repoPath string) (*models.GitConfig, error) {
 	}, nil
 }
 
+func (s *Service) SetGitConfigIdentity(repoPath, name, email string) error {
+	repo, err := s.OpenRepository(repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	cfg, err := repo.Config()
+	if err != nil {
+		return fmt.Errorf("failed to get repository config: %w", err)
+	}
+
+	cfg.User.Name = name
+	cfg.User.Email = email
+
+	if err := repo.SetConfig(cfg); err != nil {
+		return fmt.Errorf("failed to update repository config: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) GetRemotes(repoPath string) ([]models.RepoRemote, error) {
+	repo, err := s.OpenRepository(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	remotes, err := repo.Remotes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get remotes: %w", err)
+	}
+
+	result := make([]models.RepoRemote, 0, len(remotes))
+	for _, remote := range remotes {
+		cfg := remote.Config()
+		url := ""
+		if len(cfg.URLs) > 0 {
+			url = cfg.URLs[0]
+		}
+		result = append(result, models.RepoRemote{
+			Name: cfg.Name,
+			URL:  url,
+		})
+	}
+
+	return result, nil
+}
+
 // GetCommitFileDiff returns the diff for a specific file at a specific commit.
 // It compares the file at the commit with its parent (or empty for initial commits).
 func (s *Service) GetCommitFileDiff(repoPath, commitHash, filePath string, cursor, limit int) (*models.TokenizedDiff, error) {

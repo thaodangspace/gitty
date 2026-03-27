@@ -43,6 +43,10 @@ func NewRouter(dataPath string, cfg *config.Config, reg *registry.Registry) *chi
 				r.Get("/commits/{hash}", repoHandler.GetCommitDetails)
 				r.Get("/branches", repoHandler.GetBranches)
 				r.Get("/config/git", repoHandler.GetGitConfig)
+				r.Get("/settings", repoHandler.GetRepositorySettings)
+				r.Put("/settings/identity", repoHandler.UpdateRepositorySettingsIdentity)
+				r.Put("/settings/sync", repoHandler.UpdateRepositorySettingsSync)
+				r.Put("/settings/commit", repoHandler.UpdateRepositorySettingsCommit)
 
 				r.Post("/commit", repoHandler.CreateCommit)
 				r.Post("/generate-commit-message", repoHandler.GenerateCommitMessage)
