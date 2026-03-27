@@ -11,9 +11,13 @@ import (
 
 // Config contains the runtime caps that are applied at startup.
 type Config struct {
-	Enabled          bool
-	MemoryLimitBytes int64
-	GOMAXPROCS       int
+	Enabled              bool
+	MemoryLimitBytes     int64
+	GOMAXPROCS           int
+	MaxExpensiveInflight int
+	DegradeHighWatermark float64
+	DegradeLowWatermark  float64
+	RetryAfterSeconds    int
 }
 
 // AppliedCaps reports the runtime caps that were applied.

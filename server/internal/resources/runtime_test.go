@@ -64,15 +64,23 @@ func TestFromAppConfig(t *testing.T) {
 	}
 
 	cfg.ResourceGovernor = &appconfig.ResourceGovernorConfig{
-		Enabled:          true,
-		MemoryLimitBytes: 1 << 29,
-		GOMAXPROCS:       3,
+		Enabled:              true,
+		MemoryLimitBytes:     1 << 29,
+		GOMAXPROCS:           3,
+		MaxExpensiveInflight: 4,
+		DegradeHighWatermark: 0.90,
+		DegradeLowWatermark:  0.75,
+		RetryAfterSeconds:    5,
 	}
 	got = FromAppConfig(cfg)
 	want := Config{
-		Enabled:          true,
-		MemoryLimitBytes: 1 << 29,
-		GOMAXPROCS:       3,
+		Enabled:              true,
+		MemoryLimitBytes:     1 << 29,
+		GOMAXPROCS:           3,
+		MaxExpensiveInflight: 4,
+		DegradeHighWatermark: 0.90,
+		DegradeLowWatermark:  0.75,
+		RetryAfterSeconds:    5,
 	}
 	if got != want {
 		t.Fatalf("FromAppConfig() = %+v, want %+v", got, want)
@@ -86,9 +94,13 @@ func TestRuntimeCapsFromAppConfigDefaultFallback(t *testing.T) {
 	}
 
 	want := Config{
-		Enabled:          true,
-		MemoryLimitBytes: 1 << 30,
-		GOMAXPROCS:       2,
+		Enabled:              true,
+		MemoryLimitBytes:     1 << 30,
+		GOMAXPROCS:           2,
+		MaxExpensiveInflight: 2,
+		DegradeHighWatermark: 0.85,
+		DegradeLowWatermark:  0.70,
+		RetryAfterSeconds:    3,
 	}
 	if got != want {
 		t.Fatalf("RuntimeCapsFromAppConfig(nil) = %+v, want %+v", got, want)
