@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAtom } from 'jotai';
+import { useNavigate } from 'react-router-dom';
 import { selectedRepositoryAtom, vimModeEnabledAtom, vimFocusContextAtom, vimFocusIndexAtom } from '@/store/atoms';
 import { useCommitHistory, useRepositoryStatus, usePush } from '@/store/queries';
 import { format } from 'date-fns';
@@ -14,14 +15,13 @@ import {
     DropdownMenuTrigger,
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import CommitDetailsDialog from './CommitDetailsDialog';
 import { useVimNavigation } from '@/hooks/use-vim-navigation';
 
 export default function CommitHistory() {
     const [currentRepository] = useAtom(selectedRepositoryAtom);
     const { data: commits, isLoading, error } = useCommitHistory(currentRepository?.id);
     const { data: status } = useRepositoryStatus(currentRepository?.id);
-    const [selectedCommitHash, setSelectedCommitHash] = useState<string | null>(null);
+    const navigate = useNavigate();
     const [showForcePushWarning, setShowForcePushWarning] = useState(false);
     const pushMutation = usePush();
 
@@ -35,7 +35,7 @@ export default function CommitHistory() {
         itemCount: commits?.length || 0,
         onActivate: (index) => {
             if (commits && commits[index]) {
-                setSelectedCommitHash(commits[index].hash);
+                navigate(`/repo/${currentRepository?.id}/commit/${commits[index].hash}`);
             }
         },
     });
@@ -156,7 +156,7 @@ export default function CommitHistory() {
                     {commits.map((commit, index) => (
                         <div
                             key={commit.hash}
-                            onClick={() => setSelectedCommitHash(commit.hash)}
+                            onClick={() => navigate(`/repo/${currentRepository?.id}/commit/${commit.hash}`)}
                             className={`border rounded-lg p-4 hover:bg-muted/50 transition-colors cursor-pointer ${
                                 isVimActive && currentIndex === index ? 'ring-2 ring-blue-500 bg-blue-50/50' : ''
                             }`}
@@ -198,7 +198,7 @@ export default function CommitHistory() {
                                                 className="h-6 px-2"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    setSelectedCommitHash(commit.hash);
+                                                    navigate(`/repo/${currentRepository?.id}/commit/${commit.hash}`);
                                                 }}
                                             >
                                                 View
@@ -243,11 +243,6 @@ export default function CommitHistory() {
                 </div>
             )}
 
-            <CommitDetailsDialog
-                commitHash={selectedCommitHash}
-                isOpen={!!selectedCommitHash}
-                onClose={() => setSelectedCommitHash(null)}
-            />
         </div>
     );
 }
