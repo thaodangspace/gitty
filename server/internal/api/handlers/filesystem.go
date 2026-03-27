@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"gitweb/server/internal/filesystem"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type FilesystemHandler struct {
@@ -19,6 +21,9 @@ func NewFilesystemHandler(restrictToUserHome bool) *FilesystemHandler {
 
 func (h *FilesystemHandler) BrowseDirectory(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
+	if path == "" {
+		path = chi.URLParam(r, "*")
+	}
 
 	listing, err := h.fsService.BrowseDirectory(path)
 	if err != nil {

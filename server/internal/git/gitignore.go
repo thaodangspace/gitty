@@ -124,8 +124,14 @@ func (gi *GitIgnore) IsIgnored(path string, isDir bool) bool {
 	ignored := false
 	
 	for _, p := range gi.patterns {
-		// Skip directory-only patterns for files
 		if p.isDir && !isDir {
+			if gi.pathHasMatchedAncestor(path, p.pattern) {
+				if p.negate {
+					ignored = false
+				} else {
+					ignored = true
+				}
+			}
 			continue
 		}
 		
@@ -137,6 +143,29 @@ func (gi *GitIgnore) IsIgnored(path string, isDir bool) bool {
 			}
 		}
 	}
-	
+
 	return ignored
+}
+
+func (gi *GitIgnore) pathHasMatchedAncestor(path string, pattern *regexp.Regexp) bool {
+	dir := filepath.ToSlash(filepath.Dir(path))
+	if dir == "." || dir == "" {
+		return false
+	}
+
+	for {
+		if pattern.MatchString(dir) {
+			return true
+		}
+
+		if dir == "/" {
+			return false
+		}
+
+		next := filepath.ToSlash(filepath.Dir(dir))
+		if next == dir || next == "." || next == "" {
+			return false
+		}
+		dir = next
+	}
 }

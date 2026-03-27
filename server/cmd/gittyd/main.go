@@ -14,11 +14,15 @@ import (
 	"gitweb/server/internal/auth"
 	"gitweb/server/internal/config"
 	"gitweb/server/internal/registry"
+	"gitweb/server/internal/resources"
 
 	"github.com/go-chi/chi/v5"
 )
 
 func main() {
+	appCtx, appCancel := context.WithCancel(context.Background())
+	defer appCancel()
+
 	homeDir, _ := os.UserHomeDir()
 
 	dataPath := os.Getenv("GITTY_DATA_PATH")
@@ -34,8 +38,21 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Printf("Warning: Failed to load config: %v", err)
-		cfg = &config.Config{}
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	runtimeCaps, err := resources.RuntimeCapsFromAppConfig(cfg)
+	if err != nil {
+		log.Fatalf("Invalid resource governor config: %v", err)
+	}
+	if runtimeCaps.Enabled {
+		caps, err := resources.ApplyRuntimeCaps(runtimeCaps)
+		if err != nil {
+			log.Fatalf("Invalid resource governor config: %v", err)
+		}
+		log.Printf("Resource caps applied: memory=%d gomaxprocs=%d", caps.MemoryLimitBytes, caps.GOMAXPROCS)
+	} else {
+		log.Printf("Resource caps disabled; skipping runtime application")
 	}
 
 	// Set master password from environment variable if provided (takes precedence over config)
@@ -59,7 +76,7 @@ func main() {
 		}
 	}
 
-	apiRouter := api.NewRouter(dataPath, cfg, reg)
+	apiRouter := api.NewRouter(appCtx, dataPath, cfg, reg)
 
 	r := chi.NewRouter()
 
@@ -95,6 +112,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Println("Shutting down server...")
+	appCancel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

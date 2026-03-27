@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"gitweb/server/internal/api/handlers"
 	"gitweb/server/internal/api/middleware"
 	"gitweb/server/internal/config"
@@ -10,7 +11,7 @@ import (
 	"github.com/go-chi/cors"
 )
 
-func NewRouter(dataPath string, cfg *config.Config, reg *registry.Registry) *chi.Mux {
+func NewRouter(ctx context.Context, dataPath string, cfg *config.Config, reg *registry.Registry) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(cors.Handler(cors.Options{
@@ -26,6 +27,7 @@ func NewRouter(dataPath string, cfg *config.Config, reg *registry.Registry) *chi
 	r.Use(middleware.Recoverer)
 
 	repoHandler := handlers.NewRepositoryHandler(dataPath, cfg, reg)
+	repoHandler.StartPressureMonitor(ctx)
 	fsHandler := handlers.NewFilesystemHandler(true) // Restrict to user home directory
 
 	r.Route("/api", func(r chi.Router) {

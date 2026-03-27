@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +19,7 @@ import (
 	"gitweb/server/internal/git"
 	"gitweb/server/internal/models"
 	"gitweb/server/internal/registry"
+	"gitweb/server/internal/resources"
 )
 
 // Helper function to create a properly initialized test repository
@@ -81,6 +85,265 @@ func newRepoSettingsRequest(method, targetURL, repoID string, body []byte) *http
 	ctx := chi.NewRouteContext()
 	ctx.URLParams.Add("id", repoID)
 	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
+}
+
+func assertExpensiveRequestRejected(t *testing.T, rec *httptest.ResponseRecorder, reason string) {
+	t.Helper()
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status 503, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	if got := rec.Header().Get("Retry-After"); got != "3" {
+		t.Fatalf("expected Retry-After 3, got %q", got)
+	}
+
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response body: %v", err)
+	}
+
+	if got := body["reason"]; got != reason {
+		t.Fatalf("expected reason %q, got %q", reason, got)
+	}
+}
+
+type manualPressureTicker struct {
+	ch chan time.Time
+}
+
+func newManualPressureTicker() *manualPressureTicker {
+	return &manualPressureTicker{ch: make(chan time.Time, 1)}
+}
+
+func (t *manualPressureTicker) Chan() <-chan time.Time {
+	return t.ch
+}
+
+func (t *manualPressureTicker) Stop() {}
+
+func TestNewRepositoryHandler_DoesNotAutoStartPressureMonitor(t *testing.T) {
+	handler := NewRepositoryHandler(t.TempDir(), nil, nil)
+
+	if handler.pressureMonitorDone != nil {
+		t.Fatal("expected constructor not to start pressure monitor")
+	}
+}
+
+func TestGovernorPressureSampling_TransitionsToDegradedOnHighWatermark(t *testing.T) {
+	handler := NewRepositoryHandler(t.TempDir(), nil, nil)
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled:              true,
+		DegradeHighWatermark: 0.85,
+		DegradeLowWatermark:  0.70,
+	})
+
+	ticker := newManualPressureTicker()
+	handler.pressureSampler = func() (float64, error) {
+		return 0.90, nil
+	}
+	handler.newPressureTicker = func(time.Duration) pressureTicker {
+		return ticker
+	}
+	handler.logf = func(string, ...any) {}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler.StartPressureMonitor(ctx)
+
+	ticker.ch <- time.Now()
+
+	deadline := time.After(time.Second)
+	for {
+		if handler.governor.Mode() == resources.ModeDegraded {
+			return
+		}
+
+		select {
+		case <-deadline:
+			t.Fatalf("governor mode = %q, want %q", handler.governor.Mode(), resources.ModeDegraded)
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
+func TestGovernorPressureSampling_RecoversBelowLowWatermark(t *testing.T) {
+	handler := NewRepositoryHandler(t.TempDir(), nil, nil)
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled:              true,
+		DegradeHighWatermark: 0.85,
+		DegradeLowWatermark:  0.70,
+	})
+
+	ticker := newManualPressureTicker()
+	samples := []float64{0.90, 0.65}
+	handler.pressureSampler = func() (float64, error) {
+		if len(samples) == 0 {
+			return 0, errors.New("unexpected extra sample")
+		}
+		sample := samples[0]
+		samples = samples[1:]
+		return sample, nil
+	}
+	handler.newPressureTicker = func(time.Duration) pressureTicker {
+		return ticker
+	}
+	handler.logf = func(string, ...any) {}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler.StartPressureMonitor(ctx)
+
+	ticker.ch <- time.Now()
+	deadline := time.After(time.Second)
+	for handler.governor.Mode() != resources.ModeDegraded {
+		select {
+		case <-deadline:
+			t.Fatalf("governor mode after high pressure = %q, want %q", handler.governor.Mode(), resources.ModeDegraded)
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	ticker.ch <- time.Now()
+	deadline = time.After(time.Second)
+	for handler.governor.Mode() != resources.ModeNormal {
+		select {
+		case <-deadline:
+			t.Fatalf("governor mode after recovery pressure = %q, want %q", handler.governor.Mode(), resources.ModeNormal)
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
+func TestGovernorPressureSampling_StopsWhenContextCanceled(t *testing.T) {
+	handler := NewRepositoryHandler(t.TempDir(), nil, nil)
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled:              true,
+		DegradeHighWatermark: 0.85,
+		DegradeLowWatermark:  0.70,
+	})
+
+	ticker := newManualPressureTicker()
+	sampled := make(chan struct{}, 1)
+	handler.pressureSampler = func() (float64, error) {
+		sampled <- struct{}{}
+		return 0.90, nil
+	}
+	handler.newPressureTicker = func(time.Duration) pressureTicker {
+		return ticker
+	}
+	handler.logf = func(string, ...any) {}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	handler.StartPressureMonitor(ctx)
+
+	ticker.ch <- time.Now()
+	select {
+	case <-sampled:
+	case <-time.After(time.Second):
+		t.Fatal("expected first pressure sample before cancellation")
+	}
+
+	cancel()
+
+	deadline := time.After(time.Second)
+	for {
+		handler.pressureMonitorMu.Lock()
+		done := handler.pressureMonitorDone
+		handler.pressureMonitorMu.Unlock()
+		if done == nil {
+			break
+		}
+
+		select {
+		case <-deadline:
+			t.Fatal("pressure monitor did not stop after context cancellation")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	ticker.ch <- time.Now()
+	select {
+	case <-sampled:
+		t.Fatal("pressure sampler ran after context cancellation")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestComputeMemoryPressure(t *testing.T) {
+	tests := []struct {
+		name         string
+		total        uint64
+		heapReleased uint64
+		limit        int64
+		want         float64
+	}{
+		{
+			name:         "uses total minus heap released",
+			total:        900,
+			heapReleased: 200,
+			limit:        1000,
+			want:         0.7,
+		},
+		{
+			name:         "clamps negative usage to zero",
+			total:        200,
+			heapReleased: 300,
+			limit:        1000,
+			want:         0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := computeMemoryPressure(tt.total, tt.heapReleased, tt.limit)
+			if got != tt.want {
+				t.Fatalf("computeMemoryPressure(%d, %d, %d) = %v, want %v", tt.total, tt.heapReleased, tt.limit, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEnterExpensiveOrReject_LogsStableRoutePattern(t *testing.T) {
+	handler := NewRepositoryHandler(t.TempDir(), nil, nil)
+	handler.governor = resources.NewGovernor(resources.Config{Enabled: true})
+	handler.governor.UpdatePressure(1)
+
+	logs := make(chan string, 1)
+	handler.logf = func(format string, args ...any) {
+		logs <- fmt.Sprintf(format, args...)
+	}
+
+	r := chi.NewRouter()
+	r.Get("/api/repos/{id}/commits", func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := handler.enterExpensiveOrReject(w, r); ok {
+			t.Fatal("expected degraded request to be rejected")
+		}
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/repos/test-repo/commits", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assertExpensiveRequestRejected(t, rec, resources.ReasonDegradedMode)
+
+	select {
+	case entry := <-logs:
+		if !strings.Contains(entry, `route="/api/repos/{id}/commits"`) {
+			t.Fatalf("expected route pattern in log, got %q", entry)
+		}
+		if strings.Contains(entry, `route="/api/repos/test-repo/commits"`) {
+			t.Fatalf("expected stable route pattern, got raw path log %q", entry)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected rejection log entry")
+	}
 }
 
 func TestNewRepositoryHandler(t *testing.T) {
@@ -570,6 +833,86 @@ func TestGetCommitHistory(t *testing.T) {
 	if len(commits) < 1 {
 		t.Errorf("Expected at least 1 commit, got %d", len(commits))
 	}
+}
+
+func TestGetCommitHistory_Returns503WhenDegraded(t *testing.T) {
+	tempDir := t.TempDir()
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	if _, err := createTestRepository(handler, "test-repo"); err != nil {
+		t.Fatal(err)
+	}
+
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled: true,
+	})
+	handler.governor.UpdatePressure(1)
+
+	req := httptest.NewRequest("GET", "/repositories/test-repo/commits", nil)
+	w := httptest.NewRecorder()
+
+	chiCtx := chi.NewRouteContext()
+	chiCtx.URLParams.Add("id", "test-repo")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+
+	handler.GetCommitHistory(w, req)
+
+	assertExpensiveRequestRejected(t, w, resources.ReasonDegradedMode)
+}
+
+func TestGetRepositoryStatus_NotBlockedWhenGovernorDegraded(t *testing.T) {
+	tempDir := t.TempDir()
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	if _, err := createTestRepository(handler, "test-repo"); err != nil {
+		t.Fatal(err)
+	}
+
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled: true,
+	})
+	handler.governor.UpdatePressure(1)
+
+	req := httptest.NewRequest("GET", "/repositories/test-repo/status", nil)
+	w := httptest.NewRecorder()
+
+	chiCtx := chi.NewRouteContext()
+	chiCtx.URLParams.Add("id", "test-repo")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+
+	handler.GetRepositoryStatus(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestGetFileDiff_Returns503WhenGovernorRejects(t *testing.T) {
+	tempDir := t.TempDir()
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	repoDir, err := createTestRepository(handler, "test-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(repoDir, "README.md"), []byte("# Updated"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled: true,
+	})
+	handler.governor.UpdatePressure(1)
+
+	req := httptest.NewRequest("GET", "/repositories/test-repo/diff/README.md", nil)
+	w := httptest.NewRecorder()
+
+	chiCtx := chi.NewRouteContext()
+	chiCtx.URLParams.Add("id", "test-repo")
+	chiCtx.URLParams.Add("*", "README.md")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+
+	handler.GetFileDiff(w, req)
+
+	assertExpensiveRequestRejected(t, w, resources.ReasonDegradedMode)
 }
 
 func TestGetBranches(t *testing.T) {
@@ -1430,4 +1773,128 @@ func TestRepositorySettingsHandlers_RepoNotFound(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHandleTokenizedFileDiff_Returns503WhenSaturated(t *testing.T) {
+	tempDir := t.TempDir()
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	repoDir, err := createTestRepository(handler, "test-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(repoDir, "README.md"), []byte("# Updated"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled:              true,
+		MaxExpensiveInflight: 1,
+	})
+	admission := handler.governor.AdmitExpensive()
+	if !admission.Admitted {
+		t.Fatal("expected first expensive admission to succeed")
+	}
+	defer admission.Release()
+
+	req := httptest.NewRequest("GET", "/repositories/test-repo/diff/tokenized/README.md", nil)
+	w := httptest.NewRecorder()
+
+	chiCtx := chi.NewRouteContext()
+	chiCtx.URLParams.Add("id", "test-repo")
+	chiCtx.URLParams.Add("*", "README.md")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+
+	handler.HandleTokenizedFileDiff(w, req)
+
+	assertExpensiveRequestRejected(t, w, resources.ReasonExpensiveLimitReached)
+}
+
+func TestHandleTokenizedCommitDiff_Returns503WhenGovernorRejects(t *testing.T) {
+	tempDir := t.TempDir()
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	repoDir, err := createTestRepository(handler, "test-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	commits, err := handler.gitService.GetCommitHistory(repoDir, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) == 0 {
+		t.Fatal("expected at least one commit")
+	}
+
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled: true,
+	})
+	handler.governor.UpdatePressure(1)
+
+	req := httptest.NewRequest("GET", "/repositories/test-repo/diff/commit/tokenized?hash="+commits[0].Hash, nil)
+	w := httptest.NewRecorder()
+
+	chiCtx := chi.NewRouteContext()
+	chiCtx.URLParams.Add("id", "test-repo")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+
+	handler.HandleTokenizedCommitDiff(w, req)
+
+	assertExpensiveRequestRejected(t, w, resources.ReasonDegradedMode)
+}
+
+func TestHandleTokenizedCommitDiff_Returns404ForMissingCommit(t *testing.T) {
+	tempDir := t.TempDir()
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	if _, err := createTestRepository(handler, "test-repo"); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("GET", "/repositories/test-repo/diff/commit/tokenized?hash=does-not-exist", nil)
+	w := httptest.NewRecorder()
+
+	chiCtx := chi.NewRouteContext()
+	chiCtx.URLParams.Add("id", "test-repo")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+
+	handler.HandleTokenizedCommitDiff(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleCommitFileDiff_Returns503WhenGovernorRejects(t *testing.T) {
+	tempDir := t.TempDir()
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	repoDir, err := createTestRepository(handler, "test-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	commits, err := handler.gitService.GetCommitHistory(repoDir, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) == 0 {
+		t.Fatal("expected at least one commit")
+	}
+
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled: true,
+	})
+	handler.governor.UpdatePressure(1)
+
+	req := httptest.NewRequest("GET", "/repositories/test-repo/diff/commit/"+commits[0].Hash+"/files/README.md", nil)
+	w := httptest.NewRecorder()
+
+	chiCtx := chi.NewRouteContext()
+	chiCtx.URLParams.Add("id", "test-repo")
+	chiCtx.URLParams.Add("hash", commits[0].Hash)
+	chiCtx.URLParams.Add("*", "README.md")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+
+	handler.HandleCommitFileDiff(w, req)
+
+	assertExpensiveRequestRejected(t, w, resources.ReasonDegradedMode)
 }

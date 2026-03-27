@@ -19,6 +19,7 @@ func TestGitIgnore(t *testing.T) {
 node_modules/
 *.log
 temp/
+cache/
 !important.log
 build
 *.tmp
@@ -45,6 +46,8 @@ build
 		{"src/app.js", false, false},          // Regular file
 		{"temp", true, true},                  // Directory matching temp/
 		{"temp/file.txt", false, true},        // File in ignored directory
+		{"cache", false, false},               // File should not match cache/ directory-only pattern
+		{"cache/file.txt", false, true},       // File in cache/ directory should be ignored
 		{"build", false, true},                // File matching build pattern
 		{"build", true, true},                 // Directory matching build pattern  
 		{"file.tmp", false, true},             // File matching *.tmp pattern
