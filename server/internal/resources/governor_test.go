@@ -229,10 +229,31 @@ func TestNewGovernor_NormalizesInvalidConfig(t *testing.T) {
 	if got, want := g.cfg.DegradeHighWatermark, defaultDegradeHighWatermark; got != want {
 		t.Fatalf("normalized high watermark = %v, want %v", got, want)
 	}
-	if got, want := g.cfg.DegradeLowWatermark, defaultDegradeLowWatermark; got != want {
-		t.Fatalf("normalized low watermark = %v, want %v", got, want)
+	if g.cfg.DegradeLowWatermark <= 0 {
+		t.Fatalf("normalized low watermark = %v, want > 0", g.cfg.DegradeLowWatermark)
+	}
+	if g.cfg.DegradeLowWatermark >= g.cfg.DegradeHighWatermark {
+		t.Fatalf("normalized hysteresis invalid: low=%v high=%v", g.cfg.DegradeLowWatermark, g.cfg.DegradeHighWatermark)
 	}
 	if got, want := g.cfg.RetryAfterSeconds, defaultRetryAfterSeconds; got != want {
 		t.Fatalf("normalized retry-after = %d, want %d", got, want)
+	}
+}
+
+func TestWithGovernorDefaults_PreservesHysteresisInvariant(t *testing.T) {
+	cfg := withGovernorDefaults(Config{
+		Enabled:              true,
+		DegradeHighWatermark: 0.5,
+		DegradeLowWatermark:  0.6,
+	})
+
+	if cfg.DegradeHighWatermark <= 0 || cfg.DegradeHighWatermark > 1 {
+		t.Fatalf("normalized high watermark = %v, want within (0,1]", cfg.DegradeHighWatermark)
+	}
+	if cfg.DegradeLowWatermark <= 0 {
+		t.Fatalf("normalized low watermark = %v, want > 0", cfg.DegradeLowWatermark)
+	}
+	if cfg.DegradeLowWatermark >= cfg.DegradeHighWatermark {
+		t.Fatalf("normalized hysteresis invalid: low=%v high=%v", cfg.DegradeLowWatermark, cfg.DegradeHighWatermark)
 	}
 }

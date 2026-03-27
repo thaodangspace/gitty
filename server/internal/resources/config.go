@@ -33,8 +33,14 @@ func withGovernorDefaults(cfg Config) Config {
 	if cfg.DegradeHighWatermark <= 0 || cfg.DegradeHighWatermark > 1 {
 		cfg.DegradeHighWatermark = defaultDegradeHighWatermark
 	}
-	if cfg.DegradeLowWatermark <= 0 || cfg.DegradeLowWatermark > 1 || cfg.DegradeLowWatermark >= cfg.DegradeHighWatermark {
+	if cfg.DegradeLowWatermark <= 0 || cfg.DegradeLowWatermark >= cfg.DegradeHighWatermark {
+		cfg.DegradeLowWatermark = cfg.DegradeHighWatermark / 2
+	}
+	if cfg.DegradeLowWatermark > 1 {
 		cfg.DegradeLowWatermark = defaultDegradeLowWatermark
+	}
+	if cfg.DegradeLowWatermark >= cfg.DegradeHighWatermark {
+		cfg.DegradeLowWatermark = cfg.DegradeHighWatermark / 2
 	}
 	if cfg.RetryAfterSeconds <= 0 {
 		cfg.RetryAfterSeconds = defaultRetryAfterSeconds
