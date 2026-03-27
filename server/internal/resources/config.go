@@ -27,16 +27,16 @@ func FromAppConfig(cfg *appconfig.Config) Config {
 }
 
 func withGovernorDefaults(cfg Config) Config {
-	if cfg.MaxExpensiveInflight == 0 {
+	if cfg.MaxExpensiveInflight <= 0 {
 		cfg.MaxExpensiveInflight = defaultMaxExpensiveInflight
 	}
-	if cfg.DegradeHighWatermark == 0 {
+	if cfg.DegradeHighWatermark <= 0 || cfg.DegradeHighWatermark > 1 {
 		cfg.DegradeHighWatermark = defaultDegradeHighWatermark
 	}
-	if cfg.DegradeLowWatermark == 0 {
+	if cfg.DegradeLowWatermark <= 0 || cfg.DegradeLowWatermark > 1 || cfg.DegradeLowWatermark >= cfg.DegradeHighWatermark {
 		cfg.DegradeLowWatermark = defaultDegradeLowWatermark
 	}
-	if cfg.RetryAfterSeconds == 0 {
+	if cfg.RetryAfterSeconds <= 0 {
 		cfg.RetryAfterSeconds = defaultRetryAfterSeconds
 	}
 	return cfg

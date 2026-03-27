@@ -24,17 +24,20 @@ type Admission struct {
 }
 
 type Governor struct {
-	cfg       Config
-	mode      atomic.Int32
-	expensive chan struct{}
+	cfg Config
+
+	mu                sync.Mutex
+	mode              atomic.Int32
+	expensiveInflight int
+
+	testHookAfterPressureLock func()
 }
 
 func NewGovernor(cfg Config) *Governor {
 	cfg = withGovernorDefaults(cfg)
 
 	return &Governor{
-		cfg:       cfg,
-		expensive: make(chan struct{}, cfg.MaxExpensiveInflight),
+		cfg: cfg,
 	}
 }
 
@@ -46,6 +49,17 @@ func (g *Governor) Mode() Mode {
 }
 
 func (g *Governor) UpdatePressure(ratio float64) {
+	if !g.cfg.Enabled {
+		return
+	}
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.testHookAfterPressureLock != nil {
+		g.testHookAfterPressureLock()
+	}
+
 	switch g.Mode() {
 	case ModeNormal:
 		if ratio >= g.cfg.DegradeHighWatermark {
@@ -59,22 +73,37 @@ func (g *Governor) UpdatePressure(ratio float64) {
 }
 
 func (g *Governor) AdmitExpensive() Admission {
+	if !g.cfg.Enabled {
+		return Admission{
+			Admitted: true,
+			Release:  func() {},
+		}
+	}
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
 	if g.Mode() == ModeDegraded {
 		return Admission{Reason: ReasonDegradedMode}
 	}
 
-	select {
-	case g.expensive <- struct{}{}:
-		var once sync.Once
-		return Admission{
-			Admitted: true,
-			Release: func() {
-				once.Do(func() {
-					<-g.expensive
-				})
-			},
-		}
-	default:
+	if g.expensiveInflight >= g.cfg.MaxExpensiveInflight {
 		return Admission{Reason: ReasonExpensiveLimitReached}
+	}
+
+	g.expensiveInflight++
+
+	var once sync.Once
+	return Admission{
+		Admitted: true,
+		Release: func() {
+			once.Do(func() {
+				g.mu.Lock()
+				defer g.mu.Unlock()
+				if g.expensiveInflight > 0 {
+					g.expensiveInflight--
+				}
+			})
+		},
 	}
 }
