@@ -474,6 +474,51 @@ func TestGetRepositoryStatus(t *testing.T) {
 	}
 }
 
+func TestGetRepositoryStatus_UntrackedNotInStaged(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "handler_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	repoDir, err := createTestRepository(handler, "test-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(repoDir, "new.txt"), []byte("new"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("GET", "/repositories/test-repo/status", nil)
+	w := httptest.NewRecorder()
+
+	chiCtx := chi.NewRouteContext()
+	chiCtx.URLParams.Add("id", "test-repo")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+
+	handler.GetRepositoryStatus(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", w.Code)
+	}
+
+	var status models.RepositoryStatus
+	if err := json.Unmarshal(w.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, staged := range status.Staged {
+		if staged.Status == "?" {
+			t.Fatalf("staged must not contain '?': %+v", staged)
+		}
+		if staged.Path == "new.txt" {
+			t.Fatalf("untracked file must not appear in staged: %+v", staged)
+		}
+	}
+}
+
 func TestGetCommitHistory(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "handler_test")
 	if err != nil {
