@@ -5,27 +5,27 @@ import (
 )
 
 type Repository struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Path        string    `json:"path"`
-	URL         string    `json:"url,omitempty"`
-	Description string    `json:"description,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	IsLocal     bool      `json:"is_local"`
-	CurrentBranch string  `json:"current_branch,omitempty"`
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	Path          string    `json:"path"`
+	URL           string    `json:"url,omitempty"`
+	Description   string    `json:"description,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+	IsLocal       bool      `json:"is_local"`
+	CurrentBranch string    `json:"current_branch,omitempty"`
 }
 
 type RepositoryStatus struct {
-	RepositoryID string            `json:"repository_id"`
-	Branch       string            `json:"branch"`
-	IsClean      bool              `json:"is_clean"`
-	Ahead        int               `json:"ahead"`
-	Behind       int               `json:"behind"`
-	Staged       []FileChange      `json:"staged"`
-	Modified     []FileChange      `json:"modified"`
-	Untracked    []string          `json:"untracked"`
-	Conflicts    []string          `json:"conflicts"`
+	RepositoryID string       `json:"repository_id"`
+	Branch       string       `json:"branch"`
+	IsClean      bool         `json:"is_clean"`
+	Ahead        int          `json:"ahead"`
+	Behind       int          `json:"behind"`
+	Staged       []FileChange `json:"staged"`
+	Modified     []FileChange `json:"modified"`
+	Untracked    []string     `json:"untracked"`
+	Conflicts    []string     `json:"conflicts"`
 }
 
 type FileChange struct {
@@ -35,19 +35,19 @@ type FileChange struct {
 }
 
 type Branch struct {
-	Name      string `json:"name"`
-	IsCurrent bool   `json:"is_current"`
-	IsRemote  bool   `json:"is_remote"`
-	Upstream  string `json:"upstream,omitempty"`
+	Name       string  `json:"name"`
+	IsCurrent  bool    `json:"is_current"`
+	IsRemote   bool    `json:"is_remote"`
+	Upstream   string  `json:"upstream,omitempty"`
 	LastCommit *Commit `json:"last_commit,omitempty"`
 }
 
 type Commit struct {
-	Hash      string    `json:"hash"`
-	Message   string    `json:"message"`
-	Author    Author    `json:"author"`
-	Date      time.Time `json:"date"`
-	ParentHash string   `json:"parent_hash,omitempty"`
+	Hash       string    `json:"hash"`
+	Message    string    `json:"message"`
+	Author     Author    `json:"author"`
+	Date       time.Time `json:"date"`
+	ParentHash string    `json:"parent_hash,omitempty"`
 }
 
 type Author struct {
@@ -159,6 +159,35 @@ type GenerateCommitMessageResponse struct {
 type GitConfig struct {
 	Name  string `json:"name"`
 	Email string `json:"email"`
+}
+
+type RepoRemote struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+type RepoIdentitySettings struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+type RepoSyncSettings struct {
+	AutoFetch            bool   `json:"autoFetch"`
+	FetchIntervalMinutes int    `json:"fetchIntervalMinutes"`
+	PullStrategy         string `json:"pullStrategy"`
+}
+
+type RepoCommitSettings struct {
+	DefaultBranch  string `json:"defaultBranch"`
+	SigningEnabled bool   `json:"signingEnabled"`
+	LineEndings    string `json:"lineEndings"`
+}
+
+type RepoSettings struct {
+	Identity RepoIdentitySettings `json:"identity"`
+	Sync     RepoSyncSettings     `json:"sync"`
+	Commit   RepoCommitSettings   `json:"commit"`
+	Remotes  []RepoRemote         `json:"remotes"`
 }
 
 // ─── TOKENIZED DIFF MODELS ───

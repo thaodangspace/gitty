@@ -116,6 +116,114 @@ paths:
         '404':
           description: Repository not found
 
+  /api/repos/{id}/settings:
+    get:
+      summary: Get repository settings
+      operationId: getRepositorySettings
+      tags:
+        - Repositories
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Repository settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositorySettings'
+        '404':
+          description: Repository not found
+        '500':
+          description: Internal server error
+
+  /api/repos/{id}/settings/identity:
+    put:
+      summary: Update repository identity settings
+      operationId: updateRepositorySettingsIdentity
+      tags:
+        - Repositories
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepositoryIdentitySettings'
+      responses:
+        '204':
+          description: Identity updated
+        '400':
+          description: Invalid request
+        '404':
+          description: Repository not found
+        '500':
+          description: Internal server error
+
+  /api/repos/{id}/settings/sync:
+    put:
+      summary: Update repository sync settings
+      operationId: updateRepositorySettingsSync
+      tags:
+        - Repositories
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepositorySyncSettings'
+      responses:
+        '204':
+          description: Sync settings updated
+        '400':
+          description: Invalid request
+        '404':
+          description: Repository not found
+        '500':
+          description: Internal server error
+
+  /api/repos/{id}/settings/commit:
+    put:
+      summary: Update repository commit settings
+      operationId: updateRepositorySettingsCommit
+      tags:
+        - Repositories
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepositoryCommitSettings'
+      responses:
+        '204':
+          description: Commit settings updated
+        '400':
+          description: Invalid request
+        '404':
+          description: Repository not found
+        '500':
+          description: Internal server error
+
   /api/repos/{id}/status:
     get:
       summary: Get repository status
@@ -621,6 +729,70 @@ components:
         is_local:
           type: boolean
         current_branch:
+          type: string
+
+    RepositorySettings:
+      type: object
+      properties:
+        identity:
+          $ref: '#/components/schemas/RepositoryIdentitySettings'
+        sync:
+          $ref: '#/components/schemas/RepositorySyncSettings'
+        commit:
+          $ref: '#/components/schemas/RepositoryCommitSettings'
+        remotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RepositoryRemote'
+
+    RepositoryIdentitySettings:
+      type: object
+      required:
+        - name
+        - email
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+
+    RepositorySyncSettings:
+      type: object
+      required:
+        - autoFetch
+        - fetchIntervalMinutes
+        - pullStrategy
+      properties:
+        autoFetch:
+          type: boolean
+        fetchIntervalMinutes:
+          type: integer
+          enum: [5, 15, 30, 60]
+        pullStrategy:
+          type: string
+          enum: [merge, rebase, fast-forward]
+
+    RepositoryCommitSettings:
+      type: object
+      required:
+        - defaultBranch
+        - signingEnabled
+        - lineEndings
+      properties:
+        defaultBranch:
+          type: string
+        signingEnabled:
+          type: boolean
+        lineEndings:
+          type: string
+          enum: [lf, crlf, auto]
+
+    RepositoryRemote:
+      type: object
+      properties:
+        name:
+          type: string
+        url:
           type: string
 
     CreateRepositoryRequest:

@@ -11,10 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	gogitconfig "github.com/go-git/go-git/v5/config"
 	"gitweb/server/internal/git"
 	"gitweb/server/internal/models"
 	"gitweb/server/internal/registry"
-	"github.com/go-chi/chi/v5"
 )
 
 // Helper function to create a properly initialized test repository
@@ -73,6 +74,13 @@ func createTestRepository(handler *RepositoryHandler, repoName string) (string, 
 	}
 
 	return repoDir, nil
+}
+
+func newRepoSettingsRequest(method, targetURL, repoID string, body []byte) *http.Request {
+	req := httptest.NewRequest(method, targetURL, bytes.NewBuffer(body))
+	ctx := chi.NewRouteContext()
+	ctx.URLParams.Add("id", repoID)
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
 }
 
 func TestNewRepositoryHandler(t *testing.T) {
@@ -1209,5 +1217,217 @@ func TestImportRepositoryPersistsToRegistry(t *testing.T) {
 	}
 	if repos[0].Path != repoPath {
 		t.Fatalf("expected path %q, got %q", repoPath, repos[0].Path)
+	}
+}
+
+func TestRepositorySettingsHandlers_HappyPath(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "handler_settings_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	repoName := "settings-repo"
+	repoDir, err := createTestRepository(handler, repoName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := handler.gitService.SetGitConfigIdentity(repoDir, "Test User", "test@example.com"); err != nil {
+		t.Fatal(err)
+	}
+
+	repo, err := handler.gitService.OpenRepository(repoDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.CreateRemote(&gogitconfig.RemoteConfig{
+		Name: "origin",
+		URLs: []string{"https://example.com/test/repo.git"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	initialSettings := repoAppSettings{
+		Sync: models.RepoSyncSettings{
+			AutoFetch:            true,
+			FetchIntervalMinutes: 30,
+			PullStrategy:         "rebase",
+		},
+		Commit: models.RepoCommitSettings{
+			DefaultBranch:  "develop",
+			SigningEnabled: true,
+			LineEndings:    "crlf",
+		},
+	}
+	if err := handler.saveRepoAppSettings(repoName, initialSettings); err != nil {
+		t.Fatal(err)
+	}
+
+	getReq := newRepoSettingsRequest(http.MethodGet, "/api/repos/"+repoName+"/settings", repoName, nil)
+	getRec := httptest.NewRecorder()
+	handler.GetRepositorySettings(getRec, getReq)
+
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", getRec.Code, getRec.Body.String())
+	}
+
+	var settings models.RepoSettings
+	if err := json.Unmarshal(getRec.Body.Bytes(), &settings); err != nil {
+		t.Fatal(err)
+	}
+
+	if settings.Identity.Name != "Test User" || settings.Identity.Email != "test@example.com" {
+		t.Fatalf("unexpected identity: %+v", settings.Identity)
+	}
+	if settings.Sync != initialSettings.Sync {
+		t.Fatalf("unexpected sync settings: %+v", settings.Sync)
+	}
+	if settings.Commit != initialSettings.Commit {
+		t.Fatalf("unexpected commit settings: %+v", settings.Commit)
+	}
+	if len(settings.Remotes) != 1 || settings.Remotes[0].Name != "origin" || settings.Remotes[0].URL != "https://example.com/test/repo.git" {
+		t.Fatalf("unexpected remotes: %+v", settings.Remotes)
+	}
+
+	identityBody := []byte(`{"name":"Updated User","email":"updated@example.com"}`)
+	identityReq := newRepoSettingsRequest(http.MethodPut, "/api/repos/"+repoName+"/settings/identity", repoName, identityBody)
+	identityRec := httptest.NewRecorder()
+	handler.UpdateRepositorySettingsIdentity(identityRec, identityReq)
+	if identityRec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 for identity update, got %d: %s", identityRec.Code, identityRec.Body.String())
+	}
+
+	updatedIdentity, err := handler.gitService.GetGitConfig(repoDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updatedIdentity.Name != "Updated User" || updatedIdentity.Email != "updated@example.com" {
+		t.Fatalf("identity not updated: %+v", updatedIdentity)
+	}
+
+	syncBody := []byte(`{"autoFetch":true,"fetchIntervalMinutes":60,"pullStrategy":"fast-forward"}`)
+	syncReq := newRepoSettingsRequest(http.MethodPut, "/api/repos/"+repoName+"/settings/sync", repoName, syncBody)
+	syncRec := httptest.NewRecorder()
+	handler.UpdateRepositorySettingsSync(syncRec, syncReq)
+	if syncRec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 for sync update, got %d: %s", syncRec.Code, syncRec.Body.String())
+	}
+
+	persistedSettings, err := handler.loadRepoAppSettings(repoName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persistedSettings.Sync.AutoFetch != true || persistedSettings.Sync.FetchIntervalMinutes != 60 || persistedSettings.Sync.PullStrategy != "fast-forward" {
+		t.Fatalf("sync not updated: %+v", persistedSettings.Sync)
+	}
+	if persistedSettings.Commit != initialSettings.Commit {
+		t.Fatalf("commit settings should be unchanged after sync update: %+v", persistedSettings.Commit)
+	}
+
+	commitBody := []byte(`{"defaultBranch":"trunk","signingEnabled":true,"lineEndings":"auto"}`)
+	commitReq := newRepoSettingsRequest(http.MethodPut, "/api/repos/"+repoName+"/settings/commit", repoName, commitBody)
+	commitRec := httptest.NewRecorder()
+	handler.UpdateRepositorySettingsCommit(commitRec, commitReq)
+	if commitRec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 for commit update, got %d: %s", commitRec.Code, commitRec.Body.String())
+	}
+
+	persistedSettings, err = handler.loadRepoAppSettings(repoName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persistedSettings.Commit.DefaultBranch != "trunk" || !persistedSettings.Commit.SigningEnabled || persistedSettings.Commit.LineEndings != "auto" {
+		t.Fatalf("commit not updated: %+v", persistedSettings.Commit)
+	}
+}
+
+func TestRepositorySettingsHandlers_BadPayload(t *testing.T) {
+	tempDir := t.TempDir()
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	repoName := "settings-repo"
+	if _, err := createTestRepository(handler, repoName); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name   string
+		method func(http.ResponseWriter, *http.Request)
+		req    *http.Request
+	}{
+		{
+			name:   "identity",
+			method: handler.UpdateRepositorySettingsIdentity,
+			req:    newRepoSettingsRequest(http.MethodPut, "/api/repos/"+repoName+"/settings/identity", repoName, []byte(`{"name":"","email":"invalid"}`)),
+		},
+		{
+			name:   "sync",
+			method: handler.UpdateRepositorySettingsSync,
+			req:    newRepoSettingsRequest(http.MethodPut, "/api/repos/"+repoName+"/settings/sync", repoName, []byte(`{"autoFetch":true,"fetchIntervalMinutes":10,"pullStrategy":"merge"}`)),
+		},
+		{
+			name:   "commit",
+			method: handler.UpdateRepositorySettingsCommit,
+			req:    newRepoSettingsRequest(http.MethodPut, "/api/repos/"+repoName+"/settings/commit", repoName, []byte(`{"defaultBranch":"","signingEnabled":false,"lineEndings":"tabs"}`)),
+		},
+		{
+			name:   "identity unknown field",
+			method: handler.UpdateRepositorySettingsIdentity,
+			req:    newRepoSettingsRequest(http.MethodPut, "/api/repos/"+repoName+"/settings/identity", repoName, []byte(`{"name":"Valid","email":"valid@example.com","extra":"nope"}`)),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			tt.method(rec, tt.req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestRepositorySettingsHandlers_RepoNotFound(t *testing.T) {
+	tempDir := t.TempDir()
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	repoName := "missing-repo"
+
+	tests := []struct {
+		name   string
+		method func(http.ResponseWriter, *http.Request)
+		req    *http.Request
+	}{
+		{
+			name:   "get",
+			method: handler.GetRepositorySettings,
+			req:    newRepoSettingsRequest(http.MethodGet, "/api/repos/"+repoName+"/settings", repoName, nil),
+		},
+		{
+			name:   "identity",
+			method: handler.UpdateRepositorySettingsIdentity,
+			req:    newRepoSettingsRequest(http.MethodPut, "/api/repos/"+repoName+"/settings/identity", repoName, []byte(`{"name":"A","email":"a@example.com"}`)),
+		},
+		{
+			name:   "sync",
+			method: handler.UpdateRepositorySettingsSync,
+			req:    newRepoSettingsRequest(http.MethodPut, "/api/repos/"+repoName+"/settings/sync", repoName, []byte(`{"autoFetch":true,"fetchIntervalMinutes":15,"pullStrategy":"merge"}`)),
+		},
+		{
+			name:   "commit",
+			method: handler.UpdateRepositorySettingsCommit,
+			req:    newRepoSettingsRequest(http.MethodPut, "/api/repos/"+repoName+"/settings/commit", repoName, []byte(`{"defaultBranch":"main","signingEnabled":false,"lineEndings":"lf"}`)),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			tt.method(rec, tt.req)
+			if rec.Code != http.StatusNotFound {
+				t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
+			}
+		})
 	}
 }

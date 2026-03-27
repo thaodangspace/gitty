@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	gogitconfig "github.com/go-git/go-git/v5/config"
 	"gitweb/server/internal/models"
 )
 
@@ -67,7 +68,7 @@ func TestNewService(t *testing.T) {
 
 func TestOpenRepository(t *testing.T) {
 	service := NewService()
-	
+
 	// Create a temporary directory for testing
 	tempDir, err := os.MkdirTemp("", "git_test")
 	if err != nil {
@@ -107,7 +108,7 @@ func TestOpenRepository(t *testing.T) {
 
 func TestInitRepository(t *testing.T) {
 	service := NewService()
-	
+
 	tempDir, err := os.MkdirTemp("", "git_test")
 	if err != nil {
 		t.Fatal(err)
@@ -132,7 +133,7 @@ func TestInitRepository(t *testing.T) {
 
 func TestGetRepositoryStatus(t *testing.T) {
 	service := NewService()
-	
+
 	tempDir, err := os.MkdirTemp("", "git_test")
 	if err != nil {
 		t.Fatal(err)
@@ -202,7 +203,7 @@ func TestGetRepositoryStatus(t *testing.T) {
 
 func TestGetBranches(t *testing.T) {
 	service := NewService()
-	
+
 	tempDir, err := os.MkdirTemp("", "git_test")
 	if err != nil {
 		t.Fatal(err)
@@ -271,7 +272,7 @@ func TestGetBranches(t *testing.T) {
 
 func TestCreateBranch(t *testing.T) {
 	service := NewService()
-	
+
 	tempDir, err := os.MkdirTemp("", "git_test")
 	if err != nil {
 		t.Fatal(err)
@@ -339,7 +340,7 @@ func TestCreateBranch(t *testing.T) {
 
 func TestSwitchBranch(t *testing.T) {
 	service := NewService()
-	
+
 	tempDir, err := os.MkdirTemp("", "git_test")
 	if err != nil {
 		t.Fatal(err)
@@ -405,7 +406,7 @@ func TestSwitchBranch(t *testing.T) {
 
 func TestGetFileContentAndSaveFileContent(t *testing.T) {
 	service := NewService()
-	
+
 	tempDir, err := os.MkdirTemp("", "git_test")
 	if err != nil {
 		t.Fatal(err)
@@ -421,7 +422,7 @@ func TestGetFileContentAndSaveFileContent(t *testing.T) {
 	// Create a test file
 	testContent := []byte("Hello, World!")
 	filePath := "test.txt"
-	
+
 	err = service.SaveFileContent(tempDir, filePath, testContent)
 	if err != nil {
 		t.Fatal(err)
@@ -438,9 +439,75 @@ func TestGetFileContentAndSaveFileContent(t *testing.T) {
 	}
 }
 
+func TestSetGitConfigIdentity(t *testing.T) {
+	service := NewService()
+
+	tempDir, err := os.MkdirTemp("", "git_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	_, err = service.InitRepository(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := service.SetGitConfigIdentity(tempDir, "Alice Example", "alice@example.com"); err != nil {
+		t.Fatal(err)
+	}
+
+	gitConfig, err := service.GetGitConfig(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if gitConfig.Name != "Alice Example" || gitConfig.Email != "alice@example.com" {
+		t.Fatalf("unexpected git config: %+v", gitConfig)
+	}
+}
+
+func TestGetRemotes(t *testing.T) {
+	service := NewService()
+
+	tempDir, err := os.MkdirTemp("", "git_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	_, err = service.InitRepository(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	repo, err := service.OpenRepository(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.CreateRemote(&gogitconfig.RemoteConfig{
+		Name: "origin",
+		URLs: []string{"https://example.com/repo.git"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	remotes, err := service.GetRemotes(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(remotes) != 1 {
+		t.Fatalf("expected 1 remote, got %d", len(remotes))
+	}
+	if remotes[0].Name != "origin" || remotes[0].URL != "https://example.com/repo.git" {
+		t.Fatalf("unexpected remote: %+v", remotes[0])
+	}
+}
+
 func TestStageAndUnstageFile(t *testing.T) {
 	service := NewService()
-	
+
 	tempDir, err := os.MkdirTemp("", "git_test")
 	if err != nil {
 		t.Fatal(err)
@@ -483,7 +550,7 @@ func TestStageAndUnstageFile(t *testing.T) {
 	// Create a test file
 	testContent := []byte("Hello, World!")
 	filePath := "test.txt"
-	
+
 	err = service.SaveFileContent(tempDir, filePath, testContent)
 	if err != nil {
 		t.Fatal(err)
@@ -617,7 +684,7 @@ func TestGetRepositoryStatus_StrictNormalization(t *testing.T) {
 
 func TestCreateCommit(t *testing.T) {
 	service := NewService()
-	
+
 	tempDir, err := os.MkdirTemp("", "git_test")
 	if err != nil {
 		t.Fatal(err)
@@ -633,7 +700,7 @@ func TestCreateCommit(t *testing.T) {
 	// Create a test file
 	testContent := []byte("Hello, World!")
 	filePath := "test.txt"
-	
+
 	err = service.SaveFileContent(tempDir, filePath, testContent)
 	if err != nil {
 		t.Fatal(err)
@@ -682,7 +749,7 @@ func TestCreateCommit(t *testing.T) {
 
 func TestGetCommitHistory(t *testing.T) {
 	service := NewService()
-	
+
 	tempDir, err := os.MkdirTemp("", "git_test")
 	if err != nil {
 		t.Fatal(err)
@@ -700,7 +767,7 @@ func TestGetCommitHistory(t *testing.T) {
 		// Create a test file
 		testContent := []byte(fmt.Sprintf("Content %d", i))
 		filePath := fmt.Sprintf("test%d.txt", i)
-		
+
 		err = service.SaveFileContent(tempDir, filePath, testContent)
 		if err != nil {
 			t.Fatal(err)
@@ -749,7 +816,7 @@ func TestGetCommitHistory(t *testing.T) {
 
 func TestGetFileTree(t *testing.T) {
 	service := NewService()
-	
+
 	tempDir, err := os.MkdirTemp("", "git_test")
 	if err != nil {
 		t.Fatal(err)
@@ -812,7 +879,7 @@ func TestGetFileTree(t *testing.T) {
 
 func TestDeleteBranch(t *testing.T) {
 	service := NewService()
-	
+
 	tempDir, err := os.MkdirTemp("", "git_test")
 	if err != nil {
 		t.Fatal(err)
