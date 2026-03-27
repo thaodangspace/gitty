@@ -68,12 +68,6 @@ export default function CommitHistory() {
         }
     };
 
-    // Debug logging
-    console.log('CommitHistory - currentRepository:', currentRepository);
-    console.log('CommitHistory - commits:', commits);
-    console.log('CommitHistory - isLoading:', isLoading);
-    console.log('CommitHistory - error:', error);
-
     if (isLoading) {
         return (
             <div className="p-4 flex items-center justify-center">
