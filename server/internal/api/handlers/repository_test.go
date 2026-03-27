@@ -276,6 +276,40 @@ func TestGovernorPressureSampling_StopsWhenContextCanceled(t *testing.T) {
 	}
 }
 
+func TestComputeMemoryPressure(t *testing.T) {
+	tests := []struct {
+		name         string
+		total        uint64
+		heapReleased uint64
+		limit        int64
+		want         float64
+	}{
+		{
+			name:         "uses total minus heap released",
+			total:        900,
+			heapReleased: 200,
+			limit:        1000,
+			want:         0.7,
+		},
+		{
+			name:         "clamps negative usage to zero",
+			total:        200,
+			heapReleased: 300,
+			limit:        1000,
+			want:         0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := computeMemoryPressure(tt.total, tt.heapReleased, tt.limit)
+			if got != tt.want {
+				t.Fatalf("computeMemoryPressure(%d, %d, %d) = %v, want %v", tt.total, tt.heapReleased, tt.limit, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestEnterExpensiveOrReject_LogsStableRoutePattern(t *testing.T) {
 	handler := NewRepositoryHandler(t.TempDir(), nil, nil)
 	handler.governor = resources.NewGovernor(resources.Config{Enabled: true})
@@ -1807,6 +1841,27 @@ func TestHandleTokenizedCommitDiff_Returns503WhenGovernorRejects(t *testing.T) {
 	handler.HandleTokenizedCommitDiff(w, req)
 
 	assertExpensiveRequestRejected(t, w, resources.ReasonDegradedMode)
+}
+
+func TestHandleTokenizedCommitDiff_Returns404ForMissingCommit(t *testing.T) {
+	tempDir := t.TempDir()
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	if _, err := createTestRepository(handler, "test-repo"); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("GET", "/repositories/test-repo/diff/commit/tokenized?hash=does-not-exist", nil)
+	w := httptest.NewRecorder()
+
+	chiCtx := chi.NewRouteContext()
+	chiCtx.URLParams.Add("id", "test-repo")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+
+	handler.HandleTokenizedCommitDiff(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d: %s", w.Code, w.Body.String())
+	}
 }
 
 func TestHandleCommitFileDiff_Returns503WhenGovernorRejects(t *testing.T) {

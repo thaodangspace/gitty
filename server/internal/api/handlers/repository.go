@@ -149,14 +149,28 @@ func newPressureSampler(cfg *config.Config) func() (float64, error) {
 	}
 
 	return func() (float64, error) {
-		samples := []metrics.Sample{{Name: "/memory/classes/total:bytes"}}
+		samples := []metrics.Sample{
+			{Name: "/memory/classes/total:bytes"},
+			{Name: "/memory/classes/heap/released:bytes"},
+		}
 		metrics.Read(samples)
 		if samples[0].Value.Kind() != metrics.KindUint64 {
 			return 0, fmt.Errorf("read memory pressure metric: unexpected kind %v", samples[0].Value.Kind())
 		}
+		if samples[1].Value.Kind() != metrics.KindUint64 {
+			return 0, fmt.Errorf("read heap released metric: unexpected kind %v", samples[1].Value.Kind())
+		}
 
-		return float64(samples[0].Value.Uint64()) / float64(limit), nil
+		return computeMemoryPressure(samples[0].Value.Uint64(), samples[1].Value.Uint64(), limit), nil
 	}
+}
+
+func computeMemoryPressure(total, heapReleased uint64, limit int64) float64 {
+	if limit <= 0 || heapReleased >= total {
+		return 0
+	}
+
+	return float64(total-heapReleased) / float64(limit)
 }
 
 func sampleInterval(cfg *config.Config) time.Duration {
@@ -1478,7 +1492,13 @@ func (h *RepositoryHandler) HandleTokenizedCommitDiff(w http.ResponseWriter, r *
 
 	tokenizedDiff, err := h.gitService.TokenizeCommitDiff(repo.Path, hash)
 	if err != nil {
-		http.Error(w, "Failed to get tokenized commit diff: "+err.Error(), http.StatusInternalServerError)
+		status := http.StatusInternalServerError
+		msg := "Failed to get tokenized commit diff: " + err.Error()
+		if strings.Contains(err.Error(), "commit not found") || strings.Contains(err.Error(), "failed to get commit") {
+			status = http.StatusNotFound
+			msg = "Commit not found"
+		}
+		http.Error(w, msg, status)
 		return
 	}
 
