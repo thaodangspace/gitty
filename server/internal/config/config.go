@@ -140,7 +140,7 @@ Here are the diffs:
 
 func defaultResourceGovernorConfig() *ResourceGovernorConfig {
 	return &ResourceGovernorConfig{
-		Enabled:              false,
+		Enabled:              true,
 		MemoryLimitBytes:     1 << 30,
 		GOMAXPROCS:           2,
 		MaxExpensiveInflight: 2,

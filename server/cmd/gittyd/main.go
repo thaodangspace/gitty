@@ -39,11 +39,16 @@ func main() {
 		cfg = &config.Config{}
 	}
 
-	caps, err := resources.ApplyRuntimeCaps(resources.FromAppConfig(cfg))
-	if err != nil {
-		log.Fatalf("Invalid resource governor config: %v", err)
+	runtimeCaps := resources.FromAppConfig(cfg)
+	if runtimeCaps.Enabled {
+		caps, err := resources.ApplyRuntimeCaps(runtimeCaps)
+		if err != nil {
+			log.Fatalf("Invalid resource governor config: %v", err)
+		}
+		log.Printf("Resource caps applied: memory=%d gomaxprocs=%d", caps.MemoryLimitBytes, caps.GOMAXPROCS)
+	} else {
+		log.Printf("Resource caps disabled; skipping runtime application")
 	}
-	log.Printf("Resource caps applied: memory=%d gomaxprocs=%d", caps.MemoryLimitBytes, caps.GOMAXPROCS)
 
 	// Set master password from environment variable if provided (takes precedence over config)
 	if masterPassword != "" {

@@ -19,6 +19,10 @@ func TestLoadConfigDefaultsResourceGovernor(t *testing.T) {
 		t.Fatalf("expected resource governor config to be initialized")
 	}
 
+	if !cfg.ResourceGovernor.Enabled {
+		t.Fatalf("expected resource governor to be enabled by default")
+	}
+
 	if got, want := cfg.ResourceGovernor.MemoryLimitBytes, int64(1<<30); got != want {
 		t.Fatalf("expected memory limit %d, got %d", want, got)
 	}
