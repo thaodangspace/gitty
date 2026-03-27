@@ -23,12 +23,21 @@ export interface CommitDetailsContentProps {
 
 export default function CommitDetailsContent({ commitHash }: CommitDetailsContentProps) {
   const [currentRepository] = useAtom(selectedRepositoryAtom);
+  const [expandedFilePath, setExpandedFilePath] = useState<string | null>(null);
+
+  if (!currentRepository) {
+    return (
+      <div className="p-8 flex items-center justify-center">
+        <div className="text-muted-foreground">No repository selected</div>
+      </div>
+    );
+  }
+
   const {
     data: commitDetails,
     isLoading,
     error,
-  } = useCommitDetails(currentRepository?.id, commitHash || undefined);
-  const [expandedFilePath, setExpandedFilePath] = useState<string | null>(null);
+  } = useCommitDetails(currentRepository.id, commitHash || undefined);
 
   const getChangeTypeColor = (changeType: string) => {
     switch (changeType) {
@@ -72,10 +81,17 @@ export default function CommitDetailsContent({ commitHash }: CommitDetailsConten
 
   if (error) {
     return (
-      <div className="p-8 flex items-center justify-center">
+      <div className="p-8 flex flex-col items-center justify-center gap-4">
         <div className="text-red-600">
           Error loading commit details: {error.message}
         </div>
+        <button
+          type="button"
+          onClick={() => setExpandedFilePath(null)}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+        >
+          Go Back
+        </button>
       </div>
     );
   }
@@ -189,7 +205,7 @@ export default function CommitDetailsContent({ commitHash }: CommitDetailsConten
                   type="button"
                   aria-expanded={isExpanded}
                   onClick={() => handleFileClick(change.path)}
-                  className={`w-full flex items-center justify-between p-4 text-left transition-colors ${
+                  className={`w-full flex items-center justify-between p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 ${
                     isExpanded
                       ? "bg-muted/50 border-b"
                       : "bg-muted/30 hover:bg-muted/50"
@@ -203,7 +219,7 @@ export default function CommitDetailsContent({ commitHash }: CommitDetailsConten
                       {getChangeTypeIcon(change.change_type)}
                       {change.change_type}
                     </Badge>
-                    <span className="font-mono text-sm truncate">
+                    <span className="font-mono text-sm truncate" title={change.path}>
                       {change.path}
                     </span>
                   </div>
