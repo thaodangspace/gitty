@@ -13,7 +13,9 @@ Enforce a strict backend status contract so untracked files never appear in `sta
 
 ## Normalization Contract
 
-- `staged`: index/staging changes for tracked content only. Never include `?`.
+- `staged`: index/staging changes for tracked content only.
+  Allowed statuses: `A`, `M`, `D`, `R`, `C`.
+  Any status outside this allowlist is omitted from `staged`.
 - `modified`: worktree tracked changes only. Never include `?`.
 - `untracked`: only file paths where worktree status is untracked (`?`) and not ignored by `.gitignore`.
 - `conflicts`: unchanged from current behavior.
@@ -25,8 +27,8 @@ This preserves valid dual-state tracked files (for example, partially staged fil
 Update `GetRepositoryStatus` in `server/internal/git/service.go` to classify staging and worktree states independently with explicit guards:
 
 - Add to `staged` only when:
-  - `fileStatus.Staging != git.Unmodified`
-  - `fileStatus.Staging != git.Untracked`
+  - `fileStatus.Staging` maps to one of `A`, `M`, `D`, `R`, `C`
+  - otherwise omit from `staged` (no error)
 - Add to `modified` only when:
   - `fileStatus.Worktree != git.Unmodified`
   - `fileStatus.Worktree != git.Untracked`
@@ -47,7 +49,9 @@ No API schema changes are required. Sorting behavior remains unchanged.
 
 ## Error Handling
 
-No new error paths are introduced. This is deterministic classification of existing git status values inside current repository status retrieval.
+No new API error paths are introduced. Classification is deterministic and tolerant:
+- Unknown/non-allowlisted staging statuses are skipped in `staged`.
+- Status retrieval failures (open repo, read worktree status, etc.) remain unchanged.
 
 ## Test Strategy
 
@@ -55,8 +59,10 @@ Add backend assertions in `server/internal/git/service_test.go` to lock contract
 
 1. A newly created file appears in `Untracked` before staging.
 2. `Staged` must not contain entries with `Status == "?"`.
-3. An untracked path must not appear in `Staged`.
-4. Existing tracked file modifications still appear in `Modified`.
+3. `Staged` only contains allowlisted statuses (`A`, `M`, `D`, `R`, `C`).
+4. An untracked path must not appear in `Staged`.
+5. Existing tracked file modifications still appear in `Modified`.
+6. A partially staged tracked file can appear in both `Staged` and `Modified`.
 
 Prefer membership/contract assertions over brittle ordering-specific checks.
 
