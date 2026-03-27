@@ -78,3 +78,28 @@ func TestFromAppConfig(t *testing.T) {
 		t.Fatalf("FromAppConfig() = %+v, want %+v", got, want)
 	}
 }
+
+func TestRuntimeCapsFromAppConfigDefaultFallback(t *testing.T) {
+	got, err := RuntimeCapsFromAppConfig(nil)
+	if err != nil {
+		t.Fatalf("RuntimeCapsFromAppConfig(nil) error = %v", err)
+	}
+
+	want := Config{
+		Enabled:          true,
+		MemoryLimitBytes: 1 << 30,
+		GOMAXPROCS:       2,
+	}
+	if got != want {
+		t.Fatalf("RuntimeCapsFromAppConfig(nil) = %+v, want %+v", got, want)
+	}
+
+	got, err = RuntimeCapsFromAppConfig(&appconfig.Config{})
+	if err != nil {
+		t.Fatalf("RuntimeCapsFromAppConfig(empty config) error = %v", err)
+	}
+
+	if got != want {
+		t.Fatalf("RuntimeCapsFromAppConfig(empty config) = %+v, want %+v", got, want)
+	}
+}

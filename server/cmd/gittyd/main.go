@@ -39,7 +39,10 @@ func main() {
 		cfg = &config.Config{}
 	}
 
-	runtimeCaps := resources.FromAppConfig(cfg)
+	runtimeCaps, err := resources.RuntimeCapsFromAppConfig(cfg)
+	if err != nil {
+		log.Fatalf("Invalid resource governor config: %v", err)
+	}
 	if runtimeCaps.Enabled {
 		caps, err := resources.ApplyRuntimeCaps(runtimeCaps)
 		if err != nil {

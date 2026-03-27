@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"runtime"
 	"runtime/debug"
+
+	appconfig "gitweb/server/internal/config"
 )
 
 // Config contains the runtime caps that are applied at startup.
@@ -48,6 +50,20 @@ func ApplyRuntimeCaps(cfg Config) (AppliedCaps, error) {
 		MemoryLimitBytes: cfg.MemoryLimitBytes,
 		GOMAXPROCS:       cfg.GOMAXPROCS,
 	}, nil
+}
+
+// RuntimeCapsFromAppConfig normalizes application config before extracting
+// runtime cap settings. Nil or empty configs are expanded with defaults.
+func RuntimeCapsFromAppConfig(cfg *appconfig.Config) (Config, error) {
+	if cfg == nil {
+		cfg = &appconfig.Config{}
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return Config{}, err
+	}
+
+	return FromAppConfig(cfg), nil
 }
 
 func (c Config) String() string {

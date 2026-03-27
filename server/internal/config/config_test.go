@@ -157,6 +157,22 @@ func TestLoadConfigWithoutFile(t *testing.T) {
 	}
 }
 
+func TestValidateInitializesDefaultResourceGovernor(t *testing.T) {
+	cfg := &Config{}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() returned error: %v", err)
+	}
+
+	if cfg.ResourceGovernor == nil {
+		t.Fatalf("expected resource governor config to be initialized")
+	}
+
+	if !cfg.ResourceGovernor.Enabled {
+		t.Fatalf("expected resource governor to be enabled by default")
+	}
+}
+
 func TestLoadConfigWithMasterPassword(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
