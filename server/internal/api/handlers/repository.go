@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -109,8 +110,6 @@ func NewRepositoryHandler(dataPath string, cfg *config.Config, reg *registry.Reg
 		fmt.Printf("Warning: Failed to load repositories during initialization: %v\n", err)
 	}
 
-	handler.startPressureMonitor()
-
 	return handler
 }
 
@@ -168,15 +167,27 @@ func sampleInterval(cfg *config.Config) time.Duration {
 }
 
 func requestRoute(r *http.Request) string {
-	if r == nil || r.URL == nil {
+	if r == nil {
+		return ""
+	}
+
+	if routeCtx := chi.RouteContext(r.Context()); routeCtx != nil {
+		if pattern := routeCtx.RoutePattern(); pattern != "" {
+			return pattern
+		}
+	}
+	if r.URL == nil {
 		return ""
 	}
 	return r.URL.Path
 }
 
-func (h *RepositoryHandler) startPressureMonitor() {
+func (h *RepositoryHandler) StartPressureMonitor(ctx context.Context) {
 	if h == nil || h.governor == nil || h.pressureSampler == nil {
 		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 	if h.config != nil && h.config.ResourceGovernor != nil && !h.config.ResourceGovernor.Enabled {
 		return
@@ -196,11 +207,25 @@ func (h *RepositoryHandler) startPressureMonitor() {
 	h.pressureMonitorDone = doneCh
 
 	go func() {
-		defer close(doneCh)
-		defer ticker.Stop()
+		defer func() {
+			ticker.Stop()
+
+			h.pressureMonitorMu.Lock()
+			if h.pressureMonitorStop == stopCh {
+				h.pressureMonitorStop = nil
+			}
+			if h.pressureMonitorDone == doneCh {
+				h.pressureMonitorDone = nil
+			}
+			h.pressureMonitorMu.Unlock()
+
+			close(doneCh)
+		}()
 
 		for {
 			select {
+			case <-ctx.Done():
+				return
 			case <-stopCh:
 				return
 			case <-ticker.Chan():
@@ -219,26 +244,6 @@ func (h *RepositoryHandler) startPressureMonitor() {
 			}
 		}
 	}()
-}
-
-func (h *RepositoryHandler) stopPressureMonitor() {
-	if h == nil {
-		return
-	}
-
-	h.pressureMonitorMu.Lock()
-	stopCh := h.pressureMonitorStop
-	doneCh := h.pressureMonitorDone
-	h.pressureMonitorStop = nil
-	h.pressureMonitorDone = nil
-	h.pressureMonitorMu.Unlock()
-
-	if stopCh == nil {
-		return
-	}
-
-	close(stopCh)
-	<-doneCh
 }
 
 func (h *RepositoryHandler) loadRepositories() error {

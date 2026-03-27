@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -120,6 +122,14 @@ func (t *manualPressureTicker) Chan() <-chan time.Time {
 
 func (t *manualPressureTicker) Stop() {}
 
+func TestNewRepositoryHandler_DoesNotAutoStartPressureMonitor(t *testing.T) {
+	handler := NewRepositoryHandler(t.TempDir(), nil, nil)
+
+	if handler.pressureMonitorDone != nil {
+		t.Fatal("expected constructor not to start pressure monitor")
+	}
+}
+
 func TestGovernorPressureSampling_TransitionsToDegradedOnHighWatermark(t *testing.T) {
 	handler := NewRepositoryHandler(t.TempDir(), nil, nil)
 	handler.governor = resources.NewGovernor(resources.Config{
@@ -137,8 +147,10 @@ func TestGovernorPressureSampling_TransitionsToDegradedOnHighWatermark(t *testin
 	}
 	handler.logf = func(string, ...any) {}
 
-	handler.startPressureMonitor()
-	defer handler.stopPressureMonitor()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler.StartPressureMonitor(ctx)
 
 	ticker.ch <- time.Now()
 
@@ -180,8 +192,10 @@ func TestGovernorPressureSampling_RecoversBelowLowWatermark(t *testing.T) {
 	}
 	handler.logf = func(string, ...any) {}
 
-	handler.startPressureMonitor()
-	defer handler.stopPressureMonitor()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler.StartPressureMonitor(ctx)
 
 	ticker.ch <- time.Now()
 	deadline := time.After(time.Second)
@@ -203,6 +217,98 @@ func TestGovernorPressureSampling_RecoversBelowLowWatermark(t *testing.T) {
 		default:
 			time.Sleep(time.Millisecond)
 		}
+	}
+}
+
+func TestGovernorPressureSampling_StopsWhenContextCanceled(t *testing.T) {
+	handler := NewRepositoryHandler(t.TempDir(), nil, nil)
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled:              true,
+		DegradeHighWatermark: 0.85,
+		DegradeLowWatermark:  0.70,
+	})
+
+	ticker := newManualPressureTicker()
+	sampled := make(chan struct{}, 1)
+	handler.pressureSampler = func() (float64, error) {
+		sampled <- struct{}{}
+		return 0.90, nil
+	}
+	handler.newPressureTicker = func(time.Duration) pressureTicker {
+		return ticker
+	}
+	handler.logf = func(string, ...any) {}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	handler.StartPressureMonitor(ctx)
+
+	ticker.ch <- time.Now()
+	select {
+	case <-sampled:
+	case <-time.After(time.Second):
+		t.Fatal("expected first pressure sample before cancellation")
+	}
+
+	cancel()
+
+	deadline := time.After(time.Second)
+	for {
+		handler.pressureMonitorMu.Lock()
+		done := handler.pressureMonitorDone
+		handler.pressureMonitorMu.Unlock()
+		if done == nil {
+			break
+		}
+
+		select {
+		case <-deadline:
+			t.Fatal("pressure monitor did not stop after context cancellation")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	ticker.ch <- time.Now()
+	select {
+	case <-sampled:
+		t.Fatal("pressure sampler ran after context cancellation")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestEnterExpensiveOrReject_LogsStableRoutePattern(t *testing.T) {
+	handler := NewRepositoryHandler(t.TempDir(), nil, nil)
+	handler.governor = resources.NewGovernor(resources.Config{Enabled: true})
+	handler.governor.UpdatePressure(1)
+
+	logs := make(chan string, 1)
+	handler.logf = func(format string, args ...any) {
+		logs <- fmt.Sprintf(format, args...)
+	}
+
+	r := chi.NewRouter()
+	r.Get("/api/repos/{id}/commits", func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := handler.enterExpensiveOrReject(w, r); ok {
+			t.Fatal("expected degraded request to be rejected")
+		}
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/repos/test-repo/commits", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assertExpensiveRequestRejected(t, rec, resources.ReasonDegradedMode)
+
+	select {
+	case entry := <-logs:
+		if !strings.Contains(entry, `route="/api/repos/{id}/commits"`) {
+			t.Fatalf("expected route pattern in log, got %q", entry)
+		}
+		if strings.Contains(entry, `route="/api/repos/test-repo/commits"`) {
+			t.Fatalf("expected stable route pattern, got raw path log %q", entry)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected rejection log entry")
 	}
 }
 

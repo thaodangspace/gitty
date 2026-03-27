@@ -20,6 +20,9 @@ import (
 )
 
 func main() {
+	appCtx, appCancel := context.WithCancel(context.Background())
+	defer appCancel()
+
 	homeDir, _ := os.UserHomeDir()
 
 	dataPath := os.Getenv("GITTY_DATA_PATH")
@@ -73,7 +76,7 @@ func main() {
 		}
 	}
 
-	apiRouter := api.NewRouter(dataPath, cfg, reg)
+	apiRouter := api.NewRouter(appCtx, dataPath, cfg, reg)
 
 	r := chi.NewRouter()
 
@@ -109,6 +112,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Println("Shutting down server...")
+	appCancel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
