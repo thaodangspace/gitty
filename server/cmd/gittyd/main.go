@@ -35,8 +35,7 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Printf("Warning: Failed to load config: %v", err)
-		cfg = &config.Config{}
+		log.Fatalf("Failed to load config: %v", err)
 	}
 
 	runtimeCaps, err := resources.RuntimeCapsFromAppConfig(cfg)
