@@ -281,6 +281,8 @@ paths:
                   $ref: '#/components/schemas/Commit'
         '404':
           description: Repository not found
+        '503':
+          $ref: '#/components/responses/ResourceGovernorRejected'
 
   /api/repos/{id}/commits/{hash}:
     get:
@@ -545,6 +547,136 @@ paths:
           description: File path is required
         '404':
           description: Repository not found
+        '503':
+          $ref: '#/components/responses/ResourceGovernorRejected'
+
+  /api/repos/{id}/diff/tokenized/{path}:
+    get:
+      summary: Get tokenized file diff
+      operationId: getTokenizedFileDiff
+      tags:
+        - Files
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: staged
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Compare the staged version instead of working tree content
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Tokenized file diff
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenizedFileDiff'
+        '400':
+          description: File path is required
+        '404':
+          description: Repository not found
+        '503':
+          $ref: '#/components/responses/ResourceGovernorRejected'
+
+  /api/repos/{id}/diff/commit/tokenized:
+    get:
+      summary: Get tokenized commit diff
+      operationId: getTokenizedCommitDiff
+      tags:
+        - Files
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: hash
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tokenized commit diff
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenizedCommitDiff'
+        '400':
+          description: Commit hash is required
+        '404':
+          description: Repository not found
+        '503':
+          $ref: '#/components/responses/ResourceGovernorRejected'
+
+  /api/repos/{id}/diff/commit/{hash}/files/{path}:
+    get:
+      summary: Get tokenized commit file diff
+      operationId: getCommitFileDiff
+      tags:
+        - Files
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Tokenized file diff at a commit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenizedFileDiff'
+        '400':
+          description: Commit hash or file path is required
+        '404':
+          description: Repository, commit, or file not found
+        '503':
+          $ref: '#/components/responses/ResourceGovernorRejected'
 
   /api/repos/{id}/stage/{path}:
     post:
@@ -706,6 +838,27 @@ paths:
                       type: string
 
 components:
+  responses:
+    ResourceGovernorRejected:
+      description: Request rejected by the resource governor
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying the request
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ResourceGovernorRejected'
+          examples:
+            degradedMode:
+              summary: Rejected while the governor is degraded
+              value:
+                reason: degraded_mode
+            expensiveLimitReached:
+              summary: Rejected because the expensive request limit was reached
+              value:
+                reason: expensive_limit_reached
   schemas:
     Repository:
       type: object
@@ -944,6 +1097,130 @@ components:
           type: integer
         files_changed:
           type: integer
+
+    ResourceGovernorRejected:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          enum:
+            - degraded_mode
+            - expensive_limit_reached
+
+    Token:
+      type: object
+      properties:
+        text:
+          type: string
+        color:
+          type: string
+
+    DiffLineTokenized:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - added
+            - deleted
+            - context
+        tokens:
+          type: array
+          items:
+            $ref: '#/components/schemas/Token'
+        oldNum:
+          type: integer
+        newNum:
+          type: integer
+
+    DiffBlock:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - added
+            - deleted
+            - context
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiffLineTokenized'
+        startOld:
+          type: integer
+        endOld:
+          type: integer
+        startNew:
+          type: integer
+        endNew:
+          type: integer
+        collapsed:
+          type: boolean
+
+    DiffHunkTokenized:
+      type: object
+      properties:
+        header:
+          type: string
+        blocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiffBlock'
+
+    TokenizedDiff:
+      type: object
+      properties:
+        filename:
+          type: string
+        hunks:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiffHunkTokenized'
+        additions:
+          type: integer
+        deletions:
+          type: integer
+        has_more:
+          type: boolean
+        next_cursor:
+          type: integer
+        total_hunks:
+          type: integer
+
+    TokenizedFileDiff:
+      type: object
+      properties:
+        path:
+          type: string
+        changeType:
+          type: string
+          enum:
+            - added
+            - modified
+            - deleted
+        diff:
+          $ref: '#/components/schemas/TokenizedDiff'
+
+    TokenizedCommitDiff:
+      type: object
+      properties:
+        hash:
+          type: string
+        message:
+          type: string
+        author:
+          $ref: '#/components/schemas/Author'
+        date:
+          type: string
+          format: date-time
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/TokenizedFileDiff'
+        stats:
+          $ref: '#/components/schemas/DiffStats'
 
     FileInfo:
       type: object
