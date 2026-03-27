@@ -77,7 +77,7 @@ func (s *Service) GetRepositoryStatus(repoPath string) (*models.RepositoryStatus
 			Type:   "file",
 		}
 
-		if fileStatus.Staging != git.Unmodified {
+		if fileStatus.Staging != git.Unmodified && fileStatus.Staging != git.Untracked {
 			staged = append(staged, change)
 		}
 
