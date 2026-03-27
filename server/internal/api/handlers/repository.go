@@ -18,6 +18,7 @@ import (
 	"gitweb/server/internal/git"
 	"gitweb/server/internal/models"
 	"gitweb/server/internal/registry"
+	"gitweb/server/internal/resources"
 	"gitweb/server/internal/services"
 
 	"github.com/go-chi/chi/v5"
@@ -38,6 +39,8 @@ type RepositoryHandler struct {
 	config        *config.Config
 	claudeService *services.ClaudeService
 	registry      *registry.Registry
+	governor      *resources.Governor
+	retryAfterSec int
 }
 
 func defaultRepoAppSettings() repoAppSettings {
@@ -70,6 +73,8 @@ func NewRepositoryHandler(dataPath string, cfg *config.Config, reg *registry.Reg
 		config:        cfg,
 		claudeService: services.NewClaudeService(cfg),
 		registry:      reg,
+		governor:      resources.NewGovernor(resources.FromAppConfig(cfg)),
+		retryAfterSec: retryAfterSeconds(cfg),
 	}
 
 	// Load repositories at initialization so they're available for all handlers
@@ -78,6 +83,29 @@ func NewRepositoryHandler(dataPath string, cfg *config.Config, reg *registry.Reg
 	}
 
 	return handler
+}
+
+func retryAfterSeconds(cfg *config.Config) int {
+	if cfg != nil && cfg.ResourceGovernor != nil && cfg.ResourceGovernor.RetryAfterSeconds > 0 {
+		return cfg.ResourceGovernor.RetryAfterSeconds
+	}
+	return 3
+}
+
+func (h *RepositoryHandler) enterExpensiveOrReject(w http.ResponseWriter) (func(), bool) {
+	admission := h.governor.AdmitExpensive()
+	if admission.Admitted {
+		return admission.Release, true
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Retry-After", strconv.Itoa(h.retryAfterSec))
+	w.WriteHeader(http.StatusServiceUnavailable)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"reason": admission.Reason,
+	})
+
+	return nil, false
 }
 
 func (h *RepositoryHandler) loadRepositories() error {
@@ -314,6 +342,12 @@ func (h *RepositoryHandler) GetCommitHistory(w http.ResponseWriter, r *http.Requ
 			limit = parsedLimit
 		}
 	}
+
+	release, ok := h.enterExpensiveOrReject(w)
+	if !ok {
+		return
+	}
+	defer release()
 
 	commits, err := h.gitService.GetCommitHistory(repo.Path, limit)
 	if err != nil {
@@ -828,6 +862,12 @@ func (h *RepositoryHandler) GetFileDiff(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	release, ok := h.enterExpensiveOrReject(w)
+	if !ok {
+		return
+	}
+	defer release()
+
 	diff, err := h.gitService.GetFileDiff(repo.Path, decodedPath)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get file diff: %v", err), http.StatusInternalServerError)
@@ -1256,6 +1296,12 @@ func (h *RepositoryHandler) HandleTokenizedFileDiff(w http.ResponseWriter, r *ht
 	cursor := parseQueryInt(r, "cursor", 0)
 	limit := parseQueryInt(r, "limit", 50)
 
+	release, ok := h.enterExpensiveOrReject(w)
+	if !ok {
+		return
+	}
+	defer release()
+
 	tokenizedDiff, err := h.gitService.TokenizeDiffFromPatch(repo.Path, decodedPath, staged, cursor, limit)
 	if err != nil {
 		http.Error(w, "Failed to get tokenized diff: "+err.Error(), http.StatusInternalServerError)
@@ -1285,6 +1331,12 @@ func (h *RepositoryHandler) HandleTokenizedCommitDiff(w http.ResponseWriter, r *
 		http.Error(w, "Commit hash is required", http.StatusBadRequest)
 		return
 	}
+
+	release, ok := h.enterExpensiveOrReject(w)
+	if !ok {
+		return
+	}
+	defer release()
 
 	tokenizedDiff, err := h.gitService.TokenizeCommitDiff(repo.Path, hash)
 	if err != nil {
@@ -1331,6 +1383,12 @@ func (h *RepositoryHandler) HandleCommitFileDiff(w http.ResponseWriter, r *http.
 	// Parse pagination args
 	cursor := parseQueryInt(r, "cursor", 0)
 	limit := parseQueryInt(r, "limit", 50)
+
+	release, ok := h.enterExpensiveOrReject(w)
+	if !ok {
+		return
+	}
+	defer release()
 
 	tokenizedDiff, err := h.gitService.GetCommitFileDiff(repo.Path, commitHash, decodedPath, cursor, limit)
 	if err != nil {

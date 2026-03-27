@@ -16,6 +16,7 @@ import (
 	"gitweb/server/internal/git"
 	"gitweb/server/internal/models"
 	"gitweb/server/internal/registry"
+	"gitweb/server/internal/resources"
 )
 
 // Helper function to create a properly initialized test repository
@@ -81,6 +82,27 @@ func newRepoSettingsRequest(method, targetURL, repoID string, body []byte) *http
 	ctx := chi.NewRouteContext()
 	ctx.URLParams.Add("id", repoID)
 	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
+}
+
+func assertExpensiveRequestRejected(t *testing.T, rec *httptest.ResponseRecorder, reason string) {
+	t.Helper()
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status 503, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	if got := rec.Header().Get("Retry-After"); got != "3" {
+		t.Fatalf("expected Retry-After 3, got %q", got)
+	}
+
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response body: %v", err)
+	}
+
+	if got := body["reason"]; got != reason {
+		t.Fatalf("expected reason %q, got %q", reason, got)
+	}
 }
 
 func TestNewRepositoryHandler(t *testing.T) {
@@ -569,6 +591,56 @@ func TestGetCommitHistory(t *testing.T) {
 	// Should have at least 1 commit (initial commit)
 	if len(commits) < 1 {
 		t.Errorf("Expected at least 1 commit, got %d", len(commits))
+	}
+}
+
+func TestGetCommitHistory_Returns503WhenDegraded(t *testing.T) {
+	tempDir := t.TempDir()
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	if _, err := createTestRepository(handler, "test-repo"); err != nil {
+		t.Fatal(err)
+	}
+
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled: true,
+	})
+	handler.governor.UpdatePressure(1)
+
+	req := httptest.NewRequest("GET", "/repositories/test-repo/commits", nil)
+	w := httptest.NewRecorder()
+
+	chiCtx := chi.NewRouteContext()
+	chiCtx.URLParams.Add("id", "test-repo")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+
+	handler.GetCommitHistory(w, req)
+
+	assertExpensiveRequestRejected(t, w, resources.ReasonDegradedMode)
+}
+
+func TestGetRepositoryStatus_NotBlockedWhenGovernorDegraded(t *testing.T) {
+	tempDir := t.TempDir()
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	if _, err := createTestRepository(handler, "test-repo"); err != nil {
+		t.Fatal(err)
+	}
+
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled: true,
+	})
+	handler.governor.UpdatePressure(1)
+
+	req := httptest.NewRequest("GET", "/repositories/test-repo/status", nil)
+	w := httptest.NewRecorder()
+
+	chiCtx := chi.NewRouteContext()
+	chiCtx.URLParams.Add("id", "test-repo")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+
+	handler.GetRepositoryStatus(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -1430,4 +1502,39 @@ func TestRepositorySettingsHandlers_RepoNotFound(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHandleTokenizedFileDiff_Returns503WhenSaturated(t *testing.T) {
+	tempDir := t.TempDir()
+	handler := NewRepositoryHandler(tempDir, nil, nil)
+	repoDir, err := createTestRepository(handler, "test-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(repoDir, "README.md"), []byte("# Updated"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled:              true,
+		MaxExpensiveInflight: 1,
+	})
+	admission := handler.governor.AdmitExpensive()
+	if !admission.Admitted {
+		t.Fatal("expected first expensive admission to succeed")
+	}
+	defer admission.Release()
+
+	req := httptest.NewRequest("GET", "/repositories/test-repo/diff/tokenized/README.md", nil)
+	w := httptest.NewRecorder()
+
+	chiCtx := chi.NewRouteContext()
+	chiCtx.URLParams.Add("id", "test-repo")
+	chiCtx.URLParams.Add("*", "README.md")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+
+	handler.HandleTokenizedFileDiff(w, req)
+
+	assertExpensiveRequestRejected(t, w, resources.ReasonExpensiveLimitReached)
 }
