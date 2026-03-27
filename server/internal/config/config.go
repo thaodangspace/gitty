@@ -18,6 +18,20 @@ type Config struct {
 	// ClaudePrompt, when provided, customizes the prompt used by the Claude CLI
 	// to generate commit messages. If nil, a default prompt is used.
 	ClaudePrompt *string `json:"claudePrompt,omitempty"`
+	// ResourceGovernor controls memory and concurrency-related guardrails.
+	ResourceGovernor *ResourceGovernorConfig `json:"resourceGovernor,omitempty"`
+}
+
+// ResourceGovernorConfig contains the resource governor limits and thresholds.
+type ResourceGovernorConfig struct {
+	Enabled              bool    `json:"enabled"`
+	MemoryLimitBytes     int64   `json:"memoryLimitBytes"`
+	GOMAXPROCS           int     `json:"gomaxprocs"`
+	MaxExpensiveInflight int     `json:"maxExpensiveInflight"`
+	SampleIntervalMs     int     `json:"sampleIntervalMs"`
+	DegradeHighWatermark float64 `json:"degradeHighWatermark"`
+	DegradeLowWatermark  float64 `json:"degradeLowWatermark"`
+	RetryAfterSeconds    int     `json:"retryAfterSeconds"`
 }
 
 // Load reads the configuration from ~/.config/gitty.config.json. If the file
@@ -33,6 +47,9 @@ func Load() (*Config, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			if err := cfg.Validate(); err != nil {
+				return nil, err
+			}
 			return cfg, nil
 		}
 		return nil, fmt.Errorf("read config file: %w", err)
@@ -62,6 +79,16 @@ func (c *Config) Validate() error {
 
 	if c.ClaudePrompt != nil {
 		*c.ClaudePrompt = strings.TrimSpace(*c.ClaudePrompt)
+	}
+
+	if c.ResourceGovernor == nil {
+		c.ResourceGovernor = defaultResourceGovernorConfig()
+	} else {
+		applyResourceGovernorDefaults(c.ResourceGovernor)
+	}
+
+	if err := c.ResourceGovernor.validate(); err != nil {
+		return err
 	}
 
 	return nil
@@ -109,6 +136,74 @@ Here are the diffs:
 {{diffs}}
 
 	Provide only the commit message, no other text. response with jsonstringfy format {message: <message>, detail: <detail>}`
+}
+
+func defaultResourceGovernorConfig() *ResourceGovernorConfig {
+	return &ResourceGovernorConfig{
+		Enabled:              false,
+		MemoryLimitBytes:     1 << 30,
+		GOMAXPROCS:           2,
+		MaxExpensiveInflight: 2,
+		SampleIntervalMs:     500,
+		DegradeHighWatermark: 0.85,
+		DegradeLowWatermark:  0.70,
+		RetryAfterSeconds:    3,
+	}
+}
+
+func applyResourceGovernorDefaults(cfg *ResourceGovernorConfig) {
+	defaults := defaultResourceGovernorConfig()
+
+	if cfg.MemoryLimitBytes == 0 {
+		cfg.MemoryLimitBytes = defaults.MemoryLimitBytes
+	}
+	if cfg.GOMAXPROCS == 0 {
+		cfg.GOMAXPROCS = defaults.GOMAXPROCS
+	}
+	if cfg.MaxExpensiveInflight == 0 {
+		cfg.MaxExpensiveInflight = defaults.MaxExpensiveInflight
+	}
+	if cfg.SampleIntervalMs == 0 {
+		cfg.SampleIntervalMs = defaults.SampleIntervalMs
+	}
+	if cfg.DegradeHighWatermark == 0 {
+		cfg.DegradeHighWatermark = defaults.DegradeHighWatermark
+	}
+	if cfg.DegradeLowWatermark == 0 {
+		cfg.DegradeLowWatermark = defaults.DegradeLowWatermark
+	}
+	if cfg.RetryAfterSeconds == 0 {
+		cfg.RetryAfterSeconds = defaults.RetryAfterSeconds
+	}
+}
+
+func (c ResourceGovernorConfig) validate() error {
+	if c.MemoryLimitBytes <= 0 {
+		return errors.New("resourceGovernor.memoryLimitBytes must be positive")
+	}
+	if c.GOMAXPROCS <= 0 {
+		return errors.New("resourceGovernor.gomaxprocs must be positive")
+	}
+	if c.MaxExpensiveInflight <= 0 {
+		return errors.New("resourceGovernor.maxExpensiveInflight must be positive")
+	}
+	if c.SampleIntervalMs <= 0 {
+		return errors.New("resourceGovernor.sampleIntervalMs must be positive")
+	}
+	if c.DegradeHighWatermark <= 0 || c.DegradeHighWatermark > 1 {
+		return errors.New("resourceGovernor.degradeHighWatermark must be in (0, 1]")
+	}
+	if c.DegradeLowWatermark <= 0 || c.DegradeLowWatermark > 1 {
+		return errors.New("resourceGovernor.degradeLowWatermark must be in (0, 1]")
+	}
+	if c.DegradeLowWatermark >= c.DegradeHighWatermark {
+		return errors.New("resourceGovernor.degradeLowWatermark must be less than resourceGovernor.degradeHighWatermark")
+	}
+	if c.RetryAfterSeconds <= 0 {
+		return errors.New("resourceGovernor.retryAfterSeconds must be positive")
+	}
+
+	return nil
 }
 
 func configFilePath() (string, error) {
