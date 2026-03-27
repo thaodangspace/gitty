@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -24,6 +25,15 @@ type Service struct {
 
 func NewService() *Service {
 	return &Service{}
+}
+
+func isAllowlistedStagedStatus(status git.StatusCode) bool {
+	switch status {
+	case git.Added, git.Modified, git.Deleted, git.Renamed, git.Copied:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) OpenRepository(path string) (*git.Repository, error) {
@@ -70,6 +80,9 @@ func (s *Service) GetRepositoryStatus(repoPath string) (*models.RepositoryStatus
 	var modified []models.FileChange
 	var untracked []string
 
+	// Initialize gitignore parser to filter out ignored files
+	gitignore := NewGitIgnore(repoPath)
+
 	for file, fileStatus := range status {
 		change := models.FileChange{
 			Path:   file,
@@ -77,13 +90,16 @@ func (s *Service) GetRepositoryStatus(repoPath string) (*models.RepositoryStatus
 			Type:   "file",
 		}
 
-		if fileStatus.Staging != git.Unmodified && fileStatus.Staging != git.Untracked {
+		if isAllowlistedStagedStatus(fileStatus.Staging) {
 			staged = append(staged, change)
 		}
 
 		if fileStatus.Worktree != git.Unmodified {
 			if fileStatus.Worktree == git.Untracked {
-				untracked = append(untracked, file)
+				// Skip untracked files that are gitignored
+				if !gitignore.IsIgnored(file, false) {
+					untracked = append(untracked, file)
+				}
 			} else {
 				change.Status = string(fileStatus.Worktree)
 				modified = append(modified, change)
@@ -1207,38 +1223,25 @@ func (s *Service) GetCommitFileDiff(repoPath, commitHash, filePath string, curso
 		parentCommit, _ = repo.CommitObject(commit.ParentHashes[0])
 	}
 
-	// Get file content at commit
+	// Verify file exists in either commit or parent.
 	commitTree, err := commit.Tree()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get commit tree: %w", err)
 	}
 
-	var newContent string
 	var fileExists bool
-	commitFile, err := commitTree.File(filePath)
-	if err == nil {
-		newContent, err = commitFile.Contents()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read file at commit: %w", err)
-		}
+	if _, err := commitTree.File(filePath); err == nil {
 		fileExists = true
 	}
 
-	// Get file content at parent (if exists)
-	var oldContent string
+	// Check file existence in parent (if exists).
 	var oldFileExists bool
 	if parentCommit != nil {
 		parentTree, err := parentCommit.Tree()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get parent tree: %w", err)
 		}
-
-		parentFile, err := parentTree.File(filePath)
-		if err == nil {
-			oldContent, err = parentFile.Contents()
-			if err != nil {
-				return nil, fmt.Errorf("failed to read file at parent: %w", err)
-			}
+		if _, err := parentTree.File(filePath); err == nil {
 			oldFileExists = true
 		}
 	}
@@ -1248,9 +1251,45 @@ func (s *Service) GetCommitFileDiff(repoPath, commitHash, filePath string, curso
 		return nil, fmt.Errorf("file not found in commit or parent: %s", filePath)
 	}
 
-	// Generate unified diff
-	diffText := s.generateCommitFileDiff(filePath, oldContent, oldFileExists, newContent, fileExists)
-	if diffText == "" {
+	// Generate unified diff using git's native algorithm to avoid synthetic
+	// delete/add pairs from naive line-by-line comparison.
+	var cmd *exec.Cmd
+	if parentCommit != nil {
+		cmd = exec.Command(
+			"git",
+			"diff",
+			parentCommit.Hash.String(),
+			commit.Hash.String(),
+			"--",
+			filePath,
+		)
+	} else {
+		// Initial commit has no parent, so show this commit's patch for the file.
+		cmd = exec.Command(
+			"git",
+			"show",
+			"--format=",
+			"--patch",
+			commit.Hash.String(),
+			"--",
+			filePath,
+		)
+	}
+	cmd.Dir = repoPath
+
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			stderr := strings.TrimSpace(string(exitErr.Stderr))
+			if stderr != "" {
+				return nil, fmt.Errorf("git diff failed: %s", stderr)
+			}
+		}
+		return nil, fmt.Errorf("git diff failed: %w", err)
+	}
+
+	diffText := string(output)
+	if strings.TrimSpace(diffText) == "" {
 		return &models.TokenizedDiff{
 			Filename:   filePath,
 			Hunks:      []models.DiffHunkTokenized{},
