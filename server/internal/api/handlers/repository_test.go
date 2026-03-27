@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -102,6 +103,106 @@ func assertExpensiveRequestRejected(t *testing.T, rec *httptest.ResponseRecorder
 
 	if got := body["reason"]; got != reason {
 		t.Fatalf("expected reason %q, got %q", reason, got)
+	}
+}
+
+type manualPressureTicker struct {
+	ch chan time.Time
+}
+
+func newManualPressureTicker() *manualPressureTicker {
+	return &manualPressureTicker{ch: make(chan time.Time, 1)}
+}
+
+func (t *manualPressureTicker) Chan() <-chan time.Time {
+	return t.ch
+}
+
+func (t *manualPressureTicker) Stop() {}
+
+func TestGovernorPressureSampling_TransitionsToDegradedOnHighWatermark(t *testing.T) {
+	handler := NewRepositoryHandler(t.TempDir(), nil, nil)
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled:              true,
+		DegradeHighWatermark: 0.85,
+		DegradeLowWatermark:  0.70,
+	})
+
+	ticker := newManualPressureTicker()
+	handler.pressureSampler = func() (float64, error) {
+		return 0.90, nil
+	}
+	handler.newPressureTicker = func(time.Duration) pressureTicker {
+		return ticker
+	}
+	handler.logf = func(string, ...any) {}
+
+	handler.startPressureMonitor()
+	defer handler.stopPressureMonitor()
+
+	ticker.ch <- time.Now()
+
+	deadline := time.After(time.Second)
+	for {
+		if handler.governor.Mode() == resources.ModeDegraded {
+			return
+		}
+
+		select {
+		case <-deadline:
+			t.Fatalf("governor mode = %q, want %q", handler.governor.Mode(), resources.ModeDegraded)
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
+func TestGovernorPressureSampling_RecoversBelowLowWatermark(t *testing.T) {
+	handler := NewRepositoryHandler(t.TempDir(), nil, nil)
+	handler.governor = resources.NewGovernor(resources.Config{
+		Enabled:              true,
+		DegradeHighWatermark: 0.85,
+		DegradeLowWatermark:  0.70,
+	})
+
+	ticker := newManualPressureTicker()
+	samples := []float64{0.90, 0.65}
+	handler.pressureSampler = func() (float64, error) {
+		if len(samples) == 0 {
+			return 0, errors.New("unexpected extra sample")
+		}
+		sample := samples[0]
+		samples = samples[1:]
+		return sample, nil
+	}
+	handler.newPressureTicker = func(time.Duration) pressureTicker {
+		return ticker
+	}
+	handler.logf = func(string, ...any) {}
+
+	handler.startPressureMonitor()
+	defer handler.stopPressureMonitor()
+
+	ticker.ch <- time.Now()
+	deadline := time.After(time.Second)
+	for handler.governor.Mode() != resources.ModeDegraded {
+		select {
+		case <-deadline:
+			t.Fatalf("governor mode after high pressure = %q, want %q", handler.governor.Mode(), resources.ModeDegraded)
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	ticker.ch <- time.Now()
+	deadline = time.After(time.Second)
+	for handler.governor.Mode() != resources.ModeNormal {
+		select {
+		case <-deadline:
+			t.Fatalf("governor mode after recovery pressure = %q, want %q", handler.governor.Mode(), resources.ModeNormal)
+		default:
+			time.Sleep(time.Millisecond)
+		}
 	}
 }
 

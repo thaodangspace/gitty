@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime/metrics"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,6 +31,19 @@ type repoAppSettings struct {
 	Commit models.RepoCommitSettings `json:"commit"`
 }
 
+type pressureTicker interface {
+	Chan() <-chan time.Time
+	Stop()
+}
+
+type realPressureTicker struct {
+	*time.Ticker
+}
+
+func (t realPressureTicker) Chan() <-chan time.Time {
+	return t.C
+}
+
 type RepositoryHandler struct {
 	mu            sync.RWMutex
 	settingsMu    sync.Mutex
@@ -41,6 +56,13 @@ type RepositoryHandler struct {
 	registry      *registry.Registry
 	governor      *resources.Governor
 	retryAfterSec int
+
+	pressureSampler     func() (float64, error)
+	newPressureTicker   func(time.Duration) pressureTicker
+	pressureMonitorMu   sync.Mutex
+	pressureMonitorStop chan struct{}
+	pressureMonitorDone chan struct{}
+	logf                func(string, ...any)
 }
 
 func defaultRepoAppSettings() repoAppSettings {
@@ -66,21 +88,28 @@ func NewRepositoryHandler(dataPath string, cfg *config.Config, reg *registry.Reg
 	}
 
 	handler := &RepositoryHandler{
-		gitService:    git.NewService(),
-		repositories:  make(map[string]*models.Repository),
-		dataPath:      dataPath,
-		watcher:       watcher,
-		config:        cfg,
-		claudeService: services.NewClaudeService(cfg),
-		registry:      reg,
-		governor:      resources.NewGovernor(resources.FromAppConfig(cfg)),
-		retryAfterSec: retryAfterSeconds(cfg),
+		gitService:      git.NewService(),
+		repositories:    make(map[string]*models.Repository),
+		dataPath:        dataPath,
+		watcher:         watcher,
+		config:          cfg,
+		claudeService:   services.NewClaudeService(cfg),
+		registry:        reg,
+		governor:        resources.NewGovernor(resources.FromAppConfig(cfg)),
+		retryAfterSec:   retryAfterSeconds(cfg),
+		pressureSampler: newPressureSampler(cfg),
+		newPressureTicker: func(interval time.Duration) pressureTicker {
+			return realPressureTicker{Ticker: time.NewTicker(interval)}
+		},
+		logf: log.Printf,
 	}
 
 	// Load repositories at initialization so they're available for all handlers
 	if err := handler.loadRepositories(); err != nil {
 		fmt.Printf("Warning: Failed to load repositories during initialization: %v\n", err)
 	}
+
+	handler.startPressureMonitor()
 
 	return handler
 }
@@ -92,11 +121,13 @@ func retryAfterSeconds(cfg *config.Config) int {
 	return 3
 }
 
-func (h *RepositoryHandler) enterExpensiveOrReject(w http.ResponseWriter) (func(), bool) {
+func (h *RepositoryHandler) enterExpensiveOrReject(w http.ResponseWriter, r *http.Request) (func(), bool) {
 	admission := h.governor.AdmitExpensive()
 	if admission.Admitted {
 		return admission.Release, true
 	}
+
+	h.logf("resource governor rejected request route=%q reason=%q mode=%q", requestRoute(r), admission.Reason, h.governor.Mode())
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Retry-After", strconv.Itoa(h.retryAfterSec))
@@ -106,6 +137,108 @@ func (h *RepositoryHandler) enterExpensiveOrReject(w http.ResponseWriter) (func(
 	})
 
 	return nil, false
+}
+
+func newPressureSampler(cfg *config.Config) func() (float64, error) {
+	if cfg == nil || cfg.ResourceGovernor == nil {
+		return nil
+	}
+
+	limit := cfg.ResourceGovernor.MemoryLimitBytes
+	if limit <= 0 {
+		return nil
+	}
+
+	return func() (float64, error) {
+		samples := []metrics.Sample{{Name: "/memory/classes/total:bytes"}}
+		metrics.Read(samples)
+		if samples[0].Value.Kind() != metrics.KindUint64 {
+			return 0, fmt.Errorf("read memory pressure metric: unexpected kind %v", samples[0].Value.Kind())
+		}
+
+		return float64(samples[0].Value.Uint64()) / float64(limit), nil
+	}
+}
+
+func sampleInterval(cfg *config.Config) time.Duration {
+	if cfg != nil && cfg.ResourceGovernor != nil && cfg.ResourceGovernor.SampleIntervalMs > 0 {
+		return time.Duration(cfg.ResourceGovernor.SampleIntervalMs) * time.Millisecond
+	}
+	return 500 * time.Millisecond
+}
+
+func requestRoute(r *http.Request) string {
+	if r == nil || r.URL == nil {
+		return ""
+	}
+	return r.URL.Path
+}
+
+func (h *RepositoryHandler) startPressureMonitor() {
+	if h == nil || h.governor == nil || h.pressureSampler == nil {
+		return
+	}
+	if h.config != nil && h.config.ResourceGovernor != nil && !h.config.ResourceGovernor.Enabled {
+		return
+	}
+
+	h.pressureMonitorMu.Lock()
+	defer h.pressureMonitorMu.Unlock()
+
+	if h.pressureMonitorStop != nil {
+		return
+	}
+
+	ticker := h.newPressureTicker(sampleInterval(h.config))
+	stopCh := make(chan struct{})
+	doneCh := make(chan struct{})
+	h.pressureMonitorStop = stopCh
+	h.pressureMonitorDone = doneCh
+
+	go func() {
+		defer close(doneCh)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-stopCh:
+				return
+			case <-ticker.Chan():
+				pressure, err := h.pressureSampler()
+				if err != nil {
+					h.logf("resource governor pressure sample failed err=%v", err)
+					continue
+				}
+
+				before := h.governor.Mode()
+				h.governor.UpdatePressure(pressure)
+				after := h.governor.Mode()
+				if after != before {
+					h.logf("resource governor mode changed mode=%q pressure=%.4f", after, pressure)
+				}
+			}
+		}
+	}()
+}
+
+func (h *RepositoryHandler) stopPressureMonitor() {
+	if h == nil {
+		return
+	}
+
+	h.pressureMonitorMu.Lock()
+	stopCh := h.pressureMonitorStop
+	doneCh := h.pressureMonitorDone
+	h.pressureMonitorStop = nil
+	h.pressureMonitorDone = nil
+	h.pressureMonitorMu.Unlock()
+
+	if stopCh == nil {
+		return
+	}
+
+	close(stopCh)
+	<-doneCh
 }
 
 func (h *RepositoryHandler) loadRepositories() error {
@@ -343,7 +476,7 @@ func (h *RepositoryHandler) GetCommitHistory(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	release, ok := h.enterExpensiveOrReject(w)
+	release, ok := h.enterExpensiveOrReject(w, r)
 	if !ok {
 		return
 	}
@@ -862,7 +995,7 @@ func (h *RepositoryHandler) GetFileDiff(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	release, ok := h.enterExpensiveOrReject(w)
+	release, ok := h.enterExpensiveOrReject(w, r)
 	if !ok {
 		return
 	}
@@ -1296,7 +1429,7 @@ func (h *RepositoryHandler) HandleTokenizedFileDiff(w http.ResponseWriter, r *ht
 	cursor := parseQueryInt(r, "cursor", 0)
 	limit := parseQueryInt(r, "limit", 50)
 
-	release, ok := h.enterExpensiveOrReject(w)
+	release, ok := h.enterExpensiveOrReject(w, r)
 	if !ok {
 		return
 	}
@@ -1332,7 +1465,7 @@ func (h *RepositoryHandler) HandleTokenizedCommitDiff(w http.ResponseWriter, r *
 		return
 	}
 
-	release, ok := h.enterExpensiveOrReject(w)
+	release, ok := h.enterExpensiveOrReject(w, r)
 	if !ok {
 		return
 	}
@@ -1384,7 +1517,7 @@ func (h *RepositoryHandler) HandleCommitFileDiff(w http.ResponseWriter, r *http.
 	cursor := parseQueryInt(r, "cursor", 0)
 	limit := parseQueryInt(r, "limit", 50)
 
-	release, ok := h.enterExpensiveOrReject(w)
+	release, ok := h.enterExpensiveOrReject(w, r)
 	if !ok {
 		return
 	}
