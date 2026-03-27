@@ -40,6 +40,24 @@ func containsString(values []string, value string) bool {
 	return false
 }
 
+func stagedStatusesOnlyAllowlisted(changes []models.FileChange) bool {
+	allowlist := map[string]struct{}{
+		"A": {},
+		"M": {},
+		"D": {},
+		"R": {},
+		"C": {},
+	}
+
+	for _, change := range changes {
+		if _, ok := allowlist[change.Status]; !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
 func TestNewService(t *testing.T) {
 	service := NewService()
 	if service == nil {
@@ -540,40 +558,35 @@ func TestGetRepositoryStatus_StrictNormalization(t *testing.T) {
 	}
 
 	trackedPath := "README.md"
-	initialContent := []byte("# Test Repository")
-	err = service.SaveFileContent(tempDir, trackedPath, initialContent)
-	if err != nil {
+	if err := service.SaveFileContent(tempDir, trackedPath, []byte("# Test Repository")); err != nil {
 		t.Fatal(err)
 	}
-
-	err = service.StageFile(tempDir, trackedPath)
-	if err != nil {
+	if err := service.StageFile(tempDir, trackedPath); err != nil {
 		t.Fatal(err)
 	}
-
-	commitReq := models.CommitRequest{
+	if err := service.CreateCommit(tempDir, models.CommitRequest{
 		Message: "Initial commit",
 		Files:   []string{trackedPath},
 		Author: models.Author{
 			Name:  "Test User",
 			Email: "test@example.com",
 		},
+	}); err != nil {
+		t.Fatal(err)
 	}
 
-	err = service.CreateCommit(tempDir, commitReq)
-	if err != nil {
+	if err := service.SaveFileContent(tempDir, trackedPath, []byte("# Test Repository\nstaged")); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.StageFile(tempDir, trackedPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SaveFileContent(tempDir, trackedPath, []byte("# Test Repository\nstaged\nunstaged")); err != nil {
 		t.Fatal(err)
 	}
 
 	untrackedPath := "untracked.txt"
-	err = service.SaveFileContent(tempDir, untrackedPath, []byte("new file"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	updatedTrackedContent := []byte("# Test Repository\nupdated")
-	err = service.SaveFileContent(tempDir, trackedPath, updatedTrackedContent)
-	if err != nil {
+	if err := service.SaveFileContent(tempDir, untrackedPath, []byte("new file")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -585,17 +598,20 @@ func TestGetRepositoryStatus_StrictNormalization(t *testing.T) {
 	if !containsString(status.Untracked, untrackedPath) {
 		t.Errorf("Expected %s to be reported as untracked", untrackedPath)
 	}
-
 	if containsFileChangeStatus(status.Staged, "?") {
 		t.Error("Untracked files should not appear in staged entries with status '?'")
 	}
-
 	if containsFileChangePath(status.Staged, untrackedPath) {
 		t.Error("Untracked file should not appear in staged entries")
 	}
-
+	if !stagedStatusesOnlyAllowlisted(status.Staged) {
+		t.Errorf("Expected staged statuses to be allowlisted, got %#v", status.Staged)
+	}
+	if !containsFileChangePath(status.Staged, trackedPath) {
+		t.Errorf("Expected %s to appear in staged", trackedPath)
+	}
 	if !containsFileChangePath(status.Modified, trackedPath) {
-		t.Errorf("Expected %s to be reported as modified", trackedPath)
+		t.Errorf("Expected %s to appear in modified", trackedPath)
 	}
 }
 
@@ -1183,5 +1199,78 @@ func TestGetCommitFileDiff(t *testing.T) {
 	_, err := s.GetCommitFileDiff("/tmp/test-repo", "abc123", "test.go", 0, 50)
 	if err == nil {
 		t.Error("Expected error for non-existent repo, got nil")
+	}
+}
+
+func TestGetCommitFileDiff_InsertLineDoesNotCreateSyntheticDeleteAddPairs(t *testing.T) {
+	service := NewService()
+
+	tempDir, err := os.MkdirTemp("", "git_commit_diff_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	_, err = service.InitRepository(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	filePath := "test.txt"
+	initialContent := []byte("line1\nline2\nline3\n")
+	if err := service.SaveFileContent(tempDir, filePath, initialContent); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.StageFile(tempDir, filePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.CreateCommit(tempDir, models.CommitRequest{
+		Message: "initial",
+		Files:   []string{filePath},
+		Author: models.Author{
+			Name:  "Test User",
+			Email: "test@example.com",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	updatedContent := []byte("line1\ninserted\nline2\nline3\n")
+	if err := service.SaveFileContent(tempDir, filePath, updatedContent); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.StageFile(tempDir, filePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.CreateCommit(tempDir, models.CommitRequest{
+		Message: "insert line",
+		Files:   []string{filePath},
+		Author: models.Author{
+			Name:  "Test User",
+			Email: "test@example.com",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	history, err := service.GetCommitHistory(tempDir, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) == 0 {
+		t.Fatal("Expected non-empty commit history")
+	}
+
+	latestCommitHash := history[0].Hash
+	tokenized, err := service.GetCommitFileDiff(tempDir, latestCommitHash, filePath, 0, 50)
+	if err != nil {
+		t.Fatalf("GetCommitFileDiff failed: %v", err)
+	}
+
+	if tokenized.Additions != 1 {
+		t.Fatalf("Expected exactly 1 addition for inserted line, got %d", tokenized.Additions)
+	}
+	if tokenized.Deletions != 0 {
+		t.Fatalf("Expected 0 deletions for pure insertion, got %d", tokenized.Deletions)
 	}
 }
