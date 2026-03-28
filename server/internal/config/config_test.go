@@ -31,7 +31,7 @@ func TestLoadConfigDefaultsResourceGovernor(t *testing.T) {
 		t.Fatalf("expected gomaxprocs %d, got %d", want, got)
 	}
 
-	if got, want := cfg.ResourceGovernor.MaxExpensiveInflight, 2; got != want {
+	if got, want := cfg.ResourceGovernor.MaxExpensiveInflight, 10; got != want {
 		t.Fatalf("expected max expensive inflight %d, got %d", want, got)
 	}
 
@@ -154,6 +154,14 @@ func TestLoadConfigWithoutFile(t *testing.T) {
 
 	if cfg.HasMasterPassword() {
 		t.Fatalf("expected no master password when file is missing")
+	}
+
+	if cfg.ResourceGovernor == nil {
+		t.Fatalf("expected resource governor config to be initialized")
+	}
+
+	if !cfg.ResourceGovernor.Enabled {
+		t.Fatalf("expected resource governor to be enabled by default")
 	}
 }
 

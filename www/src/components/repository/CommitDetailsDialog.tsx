@@ -5,7 +5,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { GitCommit } from "lucide-react";
-import CommitDetailsContent, { CommitDetailsContentProps } from "./CommitDetailsContent";
+import CommitDetailsContent, { type CommitDetailsContentProps } from "./CommitDetailsContent";
 
 interface CommitDetailsDialogProps extends CommitDetailsContentProps {
   isOpen: boolean;
