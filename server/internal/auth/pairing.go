@@ -115,3 +115,20 @@ func (m *PairingManager) MarkUsed(sessionID string) error {
 	sess.UsedAt = &now
 	return nil
 }
+
+// CreateSessionWithID is a test helper that creates a session with a specific ID.
+// Only for use in tests — do not use in production code.
+func (m *PairingManager) CreateSessionWithID(sessionID string) (*PairSession, error) {
+	now := time.Now()
+	sess := &PairSession{
+		SessionID: sessionID,
+		CreatedAt: now,
+		ExpiresAt: now.Add(m.ttl),
+	}
+
+	m.mu.Lock()
+	m.sessions[sessionID] = sess
+	m.mu.Unlock()
+
+	return sess, nil
+}

@@ -122,6 +122,30 @@ func (s *TokenStore) Revoke(deviceID string) error {
 	return fmt.Errorf("device %q not found", deviceID)
 }
 
+// IssueTokenWithID is a test helper that creates a token record with a specific device ID.
+// Only for use in tests — do not use in production code.
+func (s *TokenStore) IssueTokenWithID(deviceID, deviceName, rawToken string) (DeviceTokenRecord, error) {
+	hash := hashToken(rawToken)
+
+	rec := DeviceTokenRecord{
+		DeviceID:   deviceID,
+		DeviceName: deviceName,
+		TokenHash:  hash,
+		CreatedAt:  time.Now().UTC(),
+	}
+
+	s.mu.Lock()
+	s.records = append(s.records, rec)
+	if err := s.save(); err != nil {
+		s.records = s.records[:len(s.records)-1] // roll back
+		s.mu.Unlock()
+		return DeviceTokenRecord{}, err
+	}
+	s.mu.Unlock()
+
+	return rec, nil
+}
+
 // hashToken returns the hex-encoded SHA-256 digest of rawToken.
 func hashToken(rawToken string) string {
 	sum := sha256.Sum256([]byte(rawToken))
