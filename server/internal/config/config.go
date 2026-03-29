@@ -143,7 +143,7 @@ func defaultResourceGovernorConfig() *ResourceGovernorConfig {
 		Enabled:              true,
 		MemoryLimitBytes:     1 << 30,
 		GOMAXPROCS:           2,
-		MaxExpensiveInflight: 2,
+		MaxExpensiveInflight: 10,
 		SampleIntervalMs:     500,
 		DegradeHighWatermark: 0.85,
 		DegradeLowWatermark:  0.70,

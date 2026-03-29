@@ -97,7 +97,7 @@ func TestRuntimeCapsFromAppConfigDefaultFallback(t *testing.T) {
 		Enabled:              true,
 		MemoryLimitBytes:     1 << 30,
 		GOMAXPROCS:           2,
-		MaxExpensiveInflight: 2,
+		MaxExpensiveInflight: 10,
 		DegradeHighWatermark: 0.85,
 		DegradeLowWatermark:  0.70,
 		RetryAfterSeconds:    3,

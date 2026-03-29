@@ -3,7 +3,7 @@ package resources
 import appconfig "gitweb/server/internal/config"
 
 const (
-	defaultMaxExpensiveInflight = 2
+	defaultMaxExpensiveInflight = 10
 	defaultDegradeHighWatermark = 0.85
 	defaultDegradeLowWatermark  = 0.70
 	defaultRetryAfterSeconds    = 3
