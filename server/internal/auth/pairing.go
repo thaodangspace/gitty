@@ -11,6 +11,9 @@ import (
 // ErrPairSessionUnavailable is returned when a pairing session is missing, expired, or already used.
 var ErrPairSessionUnavailable = errors.New("pairing session unavailable")
 
+// DefaultPairSessionTTL is the default time-to-live for ephemeral pairing sessions.
+const DefaultPairSessionTTL = 5 * time.Minute
+
 // PairSession represents an ephemeral QR pairing session.
 type PairSession struct {
 	SessionID string
@@ -118,6 +121,7 @@ func (m *PairingManager) MarkUsed(sessionID string) error {
 
 // CreateSessionWithID is a test helper that creates a session with a specific ID.
 // Only for use in tests — do not use in production code.
+// This method is exported only to allow cross-package test helpers.
 func (m *PairingManager) CreateSessionWithID(sessionID string) (*PairSession, error) {
 	now := time.Now()
 	sess := &PairSession{

@@ -228,3 +228,48 @@ func TestLoadConfigWithEmptyMasterPassword(t *testing.T) {
 		t.Fatalf("expected error when master password is empty")
 	}
 }
+
+func TestRequireMasterPassword(t *testing.T) {
+	t.Run("returns error when master password is not configured", func(t *testing.T) {
+		cfg := &Config{}
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("Validate() returned error: %v", err)
+		}
+
+		password, err := cfg.RequireMasterPassword()
+		if err == nil {
+			t.Fatalf("expected error when master password is not configured")
+		}
+		if password != "" {
+			t.Fatalf("expected empty password on error, got %q", password)
+		}
+	})
+
+	t.Run("returns password when configured", func(t *testing.T) {
+		tmp := t.TempDir()
+		t.Setenv("HOME", tmp)
+
+		configDir := filepath.Join(tmp, ".config")
+		if err := os.MkdirAll(configDir, 0o755); err != nil {
+			t.Fatalf("failed to create config directory: %v", err)
+		}
+
+		configPath := filepath.Join(configDir, "gitty.config.json")
+		if err := os.WriteFile(configPath, []byte(`{"masterPassword":"secret"}`), 0o600); err != nil {
+			t.Fatalf("failed to write config file: %v", err)
+		}
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load() returned error: %v", err)
+		}
+
+		password, err := cfg.RequireMasterPassword()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if password != "secret" {
+			t.Fatalf("expected password 'secret', got %q", password)
+		}
+	})
+}

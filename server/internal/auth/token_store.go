@@ -124,6 +124,7 @@ func (s *TokenStore) Revoke(deviceID string) error {
 
 // IssueTokenWithID is a test helper that creates a token record with a specific device ID.
 // Only for use in tests — do not use in production code.
+// This method is exported only to allow cross-package test helpers.
 func (s *TokenStore) IssueTokenWithID(deviceID, deviceName, rawToken string) (DeviceTokenRecord, error) {
 	hash := hashToken(rawToken)
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -41,6 +42,16 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
+	// Set master password from environment variable if provided (takes precedence over config)
+	if masterPassword != "" {
+		cfg.MasterPassword = &masterPassword
+	}
+
+	// Fail fast if masterPassword is missing after env + config merge
+	if !cfg.HasMasterPassword() {
+		log.Fatal("GITTY_MASTER_PASSWORD environment variable or config file masterPassword is required")
+	}
+
 	runtimeCaps, err := resources.RuntimeCapsFromAppConfig(cfg)
 	if err != nil {
 		log.Fatalf("Invalid resource governor config: %v", err)
@@ -53,11 +64,6 @@ func main() {
 		log.Printf("Resource caps applied: memory=%d gomaxprocs=%d", caps.MemoryLimitBytes, caps.GOMAXPROCS)
 	} else {
 		log.Printf("Resource caps disabled; skipping runtime application")
-	}
-
-	// Set master password from environment variable if provided (takes precedence over config)
-	if masterPassword != "" {
-		cfg.MasterPassword = &masterPassword
 	}
 
 	// Initialize registry
@@ -76,20 +82,39 @@ func main() {
 		}
 	}
 
-	apiRouter := api.NewRouter(appCtx, dataPath, cfg, reg)
+	// Initialize auth components
+	tokenStorePath := filepath.Join(homeDir, ".config", "gitty", "auth-tokens.json")
+	if err := os.MkdirAll(filepath.Dir(tokenStorePath), 0o700); err != nil {
+		log.Fatalf("Failed to create auth directory: %v", err)
+	}
+
+	tokenStore, err := auth.NewTokenStore(tokenStorePath)
+	if err != nil {
+		log.Fatalf("Failed to initialize token store: %v", err)
+	}
+
+	pairingManager := auth.NewPairingManager(auth.DefaultPairSessionTTL)
+
+	// Create initial pairing session and print QR payload
+	session, err := pairingManager.CreateSession()
+	if err != nil {
+		log.Fatalf("Failed to create pairing session: %v", err)
+	}
+	qrPayload := fmt.Sprintf("gitty-pair://session?id=%s", session.SessionID)
+	log.Printf("Pairing session: %s", qrPayload)
+
+	apiRouter := api.NewRouter(appCtx, dataPath, cfg, reg, pairingManager, tokenStore)
 
 	r := chi.NewRouter()
 
+	// Health endpoint is mounted in apiRouter, but we add a simple one here too
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok","service":"gittyd"}`))
 	})
 
-	r.Group(func(r chi.Router) {
-		r.Use(auth.PasswordGate(masterPassword))
-		r.Mount("/", apiRouter)
-	})
+	r.Mount("/", apiRouter)
 
 	port := os.Getenv("PORT")
 	if port == "" {

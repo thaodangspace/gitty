@@ -109,6 +109,14 @@ func (c Config) MasterPasswordValue() (string, bool) {
 	return *c.MasterPassword, true
 }
 
+// RequireMasterPassword returns the master password if set, or errors if not configured.
+func (c *Config) RequireMasterPassword() (string, error) {
+	if !c.HasMasterPassword() {
+		return "", errors.New("masterPassword is required but not configured")
+	}
+	return *c.MasterPassword, nil
+}
+
 // ClaudePromptValue returns the configured Claude prompt, or a default prompt
 // if none is configured.
 func (c Config) ClaudePromptValue() string {
