@@ -32,6 +32,12 @@ type repoAppSettings struct {
 	Commit models.RepoCommitSettings `json:"commit"`
 }
 
+// ImportRepositoryRequest represents the request body for importing a repository
+type ImportRepositoryRequest struct {
+	Path string `json:"path"`
+	Name string `json:"name,omitempty"`
+}
+
 type pressureTicker interface {
 	Chan() <-chan time.Time
 	Stop()
@@ -749,6 +755,16 @@ func (h *RepositoryHandler) GetFileTree(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(listing)
 }
 
+// @Summary      Get file content
+// @Description  Read the content of a file in a repository
+// @Tags         repositories
+// @Produce      plain
+// @Param        id    path     string  true  "Repository ID"
+// @Param        "*"   path     string  true  "File path"
+// @Success      200   {string} string  "File content"
+// @Failure      404   {string} string  "Repository or file not found"
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/files/* [get]
 func (h *RepositoryHandler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
@@ -776,6 +792,17 @@ func (h *RepositoryHandler) GetFileContent(w http.ResponseWriter, r *http.Reques
 	w.Write(content)
 }
 
+// @Summary      Save file content
+// @Description  Write content to a file in a repository
+// @Tags         repositories
+// @Accept       plain
+// @Param        id    path     string  true  "Repository ID"
+// @Param        "*"   path     string  true  "File path"
+// @Success      200   {string} string  "Success"
+// @Failure      400   {string} string  "Bad request"
+// @Failure      404   {string} string  "Repository not found"
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/files/* [put]
 func (h *RepositoryHandler) SaveFileContent(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
@@ -809,6 +836,15 @@ func (h *RepositoryHandler) SaveFileContent(w http.ResponseWriter, r *http.Reque
 	w.Write([]byte(`{"message": "File saved successfully"}`))
 }
 
+// @Summary      Push to remote
+// @Description  Push current branch to remote
+// @Tags         repositories
+// @Param        id    path     string  true  "Repository ID"
+// @Success      200   {string} string  "Push result"
+// @Failure      400   {string} string  "Bad request"
+// @Failure      500   {string} string  "Internal server error"
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/push [post]
 func (h *RepositoryHandler) Push(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
@@ -831,6 +867,15 @@ func (h *RepositoryHandler) Push(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"message": "Push completed successfully"}`))
 }
 
+// @Summary      Force push to remote
+// @Description  Force push current branch to remote
+// @Tags         repositories
+// @Param        id    path     string  true  "Repository ID"
+// @Success      200   {string} string  "Success"
+// @Failure      400   {string} string  "Bad request"
+// @Failure      500   {string} string  "Internal server error"
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/push/force [post]
 func (h *RepositoryHandler) ForcePush(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
@@ -853,11 +898,17 @@ func (h *RepositoryHandler) ForcePush(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"message": "Force push completed successfully"}`))
 }
 
+// @Summary      Import existing repository
+// @Description  Import an existing repository from disk
+// @Tags         repositories
+// @Accept       json
+// @Param        body  body     ImportRepositoryRequest  true  "Request body"
+// @Success      201   {object} models.Repository
+// @Failure      400   {string} string "Bad request"
+// @Security     BearerAuth
+// @Router       /api/repos/import [post]
 func (h *RepositoryHandler) ImportRepository(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Path string `json:"path"`
-		Name string `json:"name,omitempty"`
-	}
+	var req ImportRepositoryRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -933,6 +984,14 @@ func (h *RepositoryHandler) ImportRepository(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(repo)
 }
 
+// @Summary      Pull from remote
+// @Description  Pull changes from remote
+// @Tags         repositories
+// @Param        id    path     string  true  "Repository ID"
+// @Success      200   {string} string  "Pull result"
+// @Failure      404   {string} string  "Repository not found"
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/pull [post]
 func (h *RepositoryHandler) Pull(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
@@ -955,6 +1014,15 @@ func (h *RepositoryHandler) Pull(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"message": "Pull completed successfully"}`))
 }
 
+// @Summary      Stage a file
+// @Description  Stage a file for commit
+// @Tags         repositories
+// @Param        id    path     string  true  "Repository ID"
+// @Param        "*"   path     string  true  "File path pattern"
+// @Success      200   {string} string  "Success"
+// @Failure      404   {string} string  "Repository not found"
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/stage/* [post]
 func (h *RepositoryHandler) StageFile(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
@@ -982,6 +1050,14 @@ func (h *RepositoryHandler) StageFile(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"message": "File staged successfully"}`))
 }
 
+// @Summary      Stage all files
+// @Description  Stage all modified files
+// @Tags         repositories
+// @Param        id    path     string  true  "Repository ID"
+// @Success      200   {string} string  "Success"
+// @Failure      404   {string} string  "Repository not found"
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/stage-all [post]
 func (h *RepositoryHandler) StageAllFiles(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
@@ -1004,6 +1080,15 @@ func (h *RepositoryHandler) StageAllFiles(w http.ResponseWriter, r *http.Request
 	w.Write([]byte(`{"message": "All files staged successfully"}`))
 }
 
+// @Summary      Unstage a file
+// @Description  Unstage a file from the index
+// @Tags         repositories
+// @Param        id    path     string  true  "Repository ID"
+// @Param        "*"   path     string  true  "File path pattern"
+// @Success      200   {string} string  "Success"
+// @Failure      404   {string} string  "Repository not found"
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/stage/* [delete]
 func (h *RepositoryHandler) UnstageFile(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
@@ -1031,6 +1116,16 @@ func (h *RepositoryHandler) UnstageFile(w http.ResponseWriter, r *http.Request) 
 	w.Write([]byte(`{"message": "File unstaged successfully"}`))
 }
 
+// @Summary      Get commit details
+// @Description  Get detailed information about a specific commit
+// @Tags         repositories
+// @Produce      json
+// @Param        id     path     string  true  "Repository ID"
+// @Param        hash   path     string  true  "Commit hash"
+// @Success      200    {object} models.CommitDetail
+// @Failure      404    {string} string "Repository or commit not found"
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/commits/{hash} [get]
 func (h *RepositoryHandler) GetCommitDetails(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	commitHash := chi.URLParam(r, "hash")
@@ -1062,6 +1157,15 @@ func (h *RepositoryHandler) GetCommitDetails(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(commitDetail)
 }
 
+// @Summary      Delete a branch
+// @Description  Delete a branch from the repository
+// @Tags         repositories
+// @Param        id     path     string  true  "Repository ID"
+// @Param        branch path     string  true  "Branch name"
+// @Success      204    {string} string "Deleted"
+// @Failure      404    {string} string "Repository or branch not found"
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/branches/{branch} [delete]
 func (h *RepositoryHandler) DeleteBranch(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	branchName := chi.URLParam(r, "branch")
@@ -1090,6 +1194,17 @@ func (h *RepositoryHandler) DeleteBranch(w http.ResponseWriter, r *http.Request)
 	w.Write([]byte(`{"message": "Branch deleted successfully"}`))
 }
 
+// @Summary      Get file diff
+// @Description  Get diff for a file
+// @Tags         repositories
+// @Produce      json
+// @Param        id    path     string  true  "Repository ID"
+// @Param        "*"   path     string  true  "File path"
+// @Success      200   {object} models.DiffResult
+// @Failure      400   {string} string "Bad request"
+// @Failure      404   {string} string "Repository not found"
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/diff/* [get]
 func (h *RepositoryHandler) GetFileDiff(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
