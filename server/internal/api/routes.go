@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 func NewRouter(ctx context.Context, dataPath string, cfg *config.Config, reg *registry.Registry, pm *auth.PairingManager, ts *auth.TokenStore, authHandler *handlers.AuthHandler) *chi.Mux {
@@ -34,6 +35,9 @@ func NewRouter(ctx context.Context, dataPath string, cfg *config.Config, reg *re
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok","service":"gittyd"}`))
 	})
+
+	// Swagger documentation endpoint (public)
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	// Initialize handlers
 	repoHandler := newRepoHandler(ctx, dataPath, cfg, reg)
