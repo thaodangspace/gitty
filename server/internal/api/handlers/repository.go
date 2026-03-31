@@ -293,6 +293,13 @@ func (h *RepositoryHandler) isGitRepository(path string) bool {
 	return err == nil
 }
 
+// @Summary      List all repositories
+// @Description  Get all registered Git repositories
+// @Tags         repositories
+// @Produce      json
+// @Success      200  {array}   models.Repository
+// @Security     BearerAuth
+// @Router       /api/repos [get]
 func (h *RepositoryHandler) ListRepositories(w http.ResponseWriter, r *http.Request) {
 	h.mu.RLock()
 	repos := make([]*models.Repository, 0, len(h.repositories))
@@ -312,6 +319,16 @@ func (h *RepositoryHandler) ListRepositories(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(repos)
 }
 
+// @Summary      Create a new repository
+// @Description  Create a new Git repository or clone from URL
+// @Tags         repositories
+// @Accept       json
+// @Produce      json
+// @Param        body  body     models.CreateRepositoryRequest  true  "Request body"
+// @Success      201   {object} models.Repository
+// @Failure      400   {string} string "Bad request"
+// @Security     BearerAuth
+// @Router       /api/repos [post]
 func (h *RepositoryHandler) CreateRepository(w http.ResponseWriter, r *http.Request) {
 	var req models.CreateRepositoryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -395,6 +412,15 @@ func (h *RepositoryHandler) CreateRepository(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(repo)
 }
 
+// @Summary      Get repository by ID
+// @Description  Get details for a specific repository
+// @Tags         repositories
+// @Produce      json
+// @Param        id    path     string  true  "Repository ID"
+// @Success      200   {object} models.Repository
+// @Failure      404   {string} string "Repository not found"
+// @Security     BearerAuth
+// @Router       /api/repos/{id} [get]
 func (h *RepositoryHandler) GetRepository(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
@@ -416,6 +442,14 @@ func (h *RepositoryHandler) GetRepository(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(repo)
 }
 
+// @Summary      Delete a repository
+// @Description  Delete a repository from Gittyd
+// @Tags         repositories
+// @Param        id    path     string  true  "Repository ID"
+// @Success      204   {string} string "No content"
+// @Failure      404   {string} string "Repository not found"
+// @Security     BearerAuth
+// @Router       /api/repos/{id} [delete]
 func (h *RepositoryHandler) DeleteRepository(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
@@ -442,6 +476,15 @@ func (h *RepositoryHandler) DeleteRepository(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// @Summary      Get repository status
+// @Description  Get working directory status (staged, modified, untracked files)
+// @Tags         repositories
+// @Produce      json
+// @Param        id    path     string  true  "Repository ID"
+// @Success      200   {object} models.RepositoryStatus
+// @Failure      404   {string} string "Repository not found"
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/status [get]
 func (h *RepositoryHandler) GetRepositoryStatus(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
@@ -475,6 +518,15 @@ func (h *RepositoryHandler) GetRepositoryStatus(w http.ResponseWriter, r *http.R
 	json.NewEncoder(w).Encode(status)
 }
 
+// @Summary      Get commit history
+// @Description  Get commit history for a repository
+// @Tags         repositories
+// @Produce      json
+// @Param        id    path     string  true  "Repository ID"
+// @Success      200   {array}  models.Commit
+// @Failure      404   {string} string "Repository not found"
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/commits [get]
 func (h *RepositoryHandler) GetCommitHistory(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
@@ -511,6 +563,14 @@ func (h *RepositoryHandler) GetCommitHistory(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(commits)
 }
 
+// @Summary      List branches
+// @Description  List all branches for a repository
+// @Tags         repositories
+// @Produce      json
+// @Param        id    path     string  true  "Repository ID"
+// @Success      200   {array}  models.Branch
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/branches [get]
 func (h *RepositoryHandler) GetBranches(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
@@ -533,6 +593,16 @@ func (h *RepositoryHandler) GetBranches(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(branches)
 }
 
+// @Summary      Create a commit
+// @Description  Create a new commit with staged changes
+// @Tags         repositories
+// @Accept       json
+// @Param        id    path     string              true  "Repository ID"
+// @Param        body  body     models.CommitRequest  true  "Request body"
+// @Success      201   {object} models.Commit
+// @Failure      400   {string} string "Bad request"
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/commit [post]
 func (h *RepositoryHandler) CreateCommit(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
@@ -566,6 +636,17 @@ func (h *RepositoryHandler) CreateCommit(w http.ResponseWriter, r *http.Request)
 	w.Write([]byte(`{"message": "Commit created successfully"}`))
 }
 
+// @Summary      Create a branch
+// @Description  Create a new branch
+// @Tags         repositories
+// @Accept       json
+// @Param        id    path     string  true  "Repository ID"
+// @Param        name  query    string  true  "Branch name"
+// @Param        from  query    string  false "Source branch (optional)"
+// @Success      201   {string} string  "Created"
+// @Failure      400   {string} string  "Bad request"
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/branches [post]
 func (h *RepositoryHandler) CreateBranch(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
@@ -601,6 +682,14 @@ func (h *RepositoryHandler) CreateBranch(w http.ResponseWriter, r *http.Request)
 	w.Write([]byte(`{"message": "Branch created successfully"}`))
 }
 
+// @Summary      Switch branch
+// @Description  Checkout a different branch
+// @Tags         repositories
+// @Param        id     path     string  true  "Repository ID"
+// @Param        branch path     string  true  "Branch name"
+// @Success      200    {string} string  "Success"
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/branches/{branch} [put]
 func (h *RepositoryHandler) SwitchBranch(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	branchName := chi.URLParam(r, "branch")
@@ -624,6 +713,15 @@ func (h *RepositoryHandler) SwitchBranch(w http.ResponseWriter, r *http.Request)
 	w.Write([]byte(`{"message": "Branch switched successfully"}`))
 }
 
+// @Summary      Get file tree
+// @Description  Get the file tree for a repository at a specific path
+// @Tags         repositories
+// @Produce      json
+// @Param        id    path     string  true  "Repository ID"
+// @Param        path  query    string  false "Directory path (optional)"
+// @Success      200   {object} models.RepoDirectoryListing
+// @Security     BearerAuth
+// @Router       /api/repos/{id}/files [get]
 func (h *RepositoryHandler) GetFileTree(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 
