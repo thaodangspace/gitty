@@ -1,0 +1,2505 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "GitWeb's backend API for managing Git repositories and browsing the local filesystem.\nThis API provides endpoints for repository management, branch/commit operations, file management, and remote sync.",
+        "title": "Gittyd API",
+        "termsOfService": "http://swagger.io/terms/",
+        "contact": {
+            "name": "API Support",
+            "email": "support@gitty.local"
+        },
+        "license": {
+            "name": "MIT",
+            "url": "https://opensource.org/licenses/MIT"
+        },
+        "version": "1.0"
+    },
+    "host": "localhost:8083",
+    "basePath": "/",
+    "paths": {
+        "/api/auth/devices": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns all device records without including token hashes. Requires Bearer auth.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "List paired devices",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/auth.DeviceTokenRecord"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/devices/{deviceId}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Revokes the device token. Returns 204 No Content on success.",
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Revoke a device",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Device ID",
+                        "name": "deviceId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "deviceId required",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "device not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/local/pair": {
+            "post": {
+                "description": "Issues a device token for localhost connections after validating the master password. This is a simplified flow for the web frontend.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Localhost-only pairing",
+                "parameters": [
+                    {
+                        "description": "Local pair request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.LocalPairRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.PairExchangeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "missing masterPassword",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "forbidden",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/pair/exchange": {
+            "post": {
+                "description": "Validates the session and master password, then issues a new device token",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Exchange pairing session for token",
+                "parameters": [
+                    {
+                        "description": "Pair exchange request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.PairExchangeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.PairExchangeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid JSON or missing required fields",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/pair/session": {
+            "get": {
+                "description": "Returns the current pairing session information for QR code scanning",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Get current pairing session",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.PairSessionResponse"
+                        }
+                    },
+                    "410": {
+                        "description": "session expired or invalid",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "503": {
+                        "description": "no active pairing session",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/filesystem/browse": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Browse a directory on the filesystem",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "filesystem"
+                ],
+                "summary": "Browse directory",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Directory path to browse",
+                        "name": "path",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.DirectoryListing"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/filesystem/roots": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List allowed root paths/volumes",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "filesystem"
+                ],
+                "summary": "List volume roots",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get all registered Git repositories",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "List all repositories",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Repository"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new Git repository or clone from URL",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Create a new repository",
+                "parameters": [
+                    {
+                        "description": "Request body",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.CreateRepositoryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.Repository"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/import": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Import an existing repository from disk",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Import existing repository",
+                "parameters": [
+                    {
+                        "description": "Request body",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ImportRepositoryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.Repository"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get details for a specific repository",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Get repository by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Repository"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete a repository from Gittyd",
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Delete a repository",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/branches": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List all branches for a repository",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "List branches",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Branch"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new branch",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Create a branch",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Branch name",
+                        "name": "name",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Source branch (optional)",
+                        "name": "from",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/branches/{branch}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Checkout a different branch",
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Switch branch",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Branch name",
+                        "name": "branch",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete a branch from the repository",
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Delete a branch",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Branch name",
+                        "name": "branch",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Deleted",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository or branch not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/commit": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new commit with staged changes",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Create a commit",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Request body",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.CommitRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.Commit"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/commits": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get commit history for a repository",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Get commit history",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Commit"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Repository not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/commits/{hash}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get detailed information about a specific commit",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Get commit details",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commit hash",
+                        "name": "hash",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.CommitDetail"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository or commit not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/config/git": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get Git configuration for a repository",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Get Git config",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.GitConfig"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/diff": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get diff for a file",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Get file diff",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File path",
+                        "name": "\"*\"",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.DiffResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/diff/commit/tokenized": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get tokenized diff for a commit",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Get tokenized commit diff",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commit hash",
+                        "name": "hash",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.TokenizedCommitDiff"
+                        }
+                    },
+                    "400": {
+                        "description": "Commit hash is required",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository or commit not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/diff/commit/{hash}/files": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get diff for a specific file in a commit",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Get commit file diff",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commit hash",
+                        "name": "hash",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File path",
+                        "name": "\"*\"",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.TokenizedDiff"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository or commit not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/diff/tokenized": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get tokenized diff for a file (for syntax highlighting)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Get tokenized file diff",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File path",
+                        "name": "\"*\"",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Show staged changes",
+                        "name": "staged",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.TokenizedDiff"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/files": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Read the content of a file in a repository",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Get file content",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File path",
+                        "name": "\"*\"",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File content",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository or file not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Write content to a file in a repository",
+                "consumes": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Save file content",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File path",
+                        "name": "\"*\"",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/generate-commit-message": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Generate a commit message using AI based on staged changes",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Generate commit message",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.GenerateCommitMessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too many requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/pull": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Pull changes from remote",
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Pull from remote",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pull result",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/push": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Push current branch to remote",
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Push to remote",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Push result",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/push/force": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Force push current branch to remote",
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Force push to remote",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/settings": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get all settings for a repository",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Get repository settings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.RepoSettings"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/settings/commit": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update commit settings for the repository",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Update commit settings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Request body",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.RepoCommitSettings"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/settings/identity": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update Git identity settings for the repository",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Update identity settings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Request body",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.RepoIdentitySettings"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/settings/sync": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update sync settings for the repository",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Update sync settings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Request body",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.RepoSyncSettings"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/stage": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Stage a file for commit",
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Stage a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File path pattern",
+                        "name": "\"*\"",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Unstage a file from the index",
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Unstage a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File path pattern",
+                        "name": "\"*\"",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/stage-all": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Stage all modified files",
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Stage all files",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/repos/{id}/status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get working directory status (staged, modified, untracked files)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repositories"
+                ],
+                "summary": "Get repository status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.RepositoryStatus"
+                        }
+                    },
+                    "404": {
+                        "description": "Repository not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "auth.DeviceTokenRecord": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "deviceId": {
+                    "type": "string"
+                },
+                "deviceName": {
+                    "type": "string"
+                },
+                "lastUsedAt": {
+                    "type": "string"
+                },
+                "revokedAt": {
+                    "type": "string"
+                },
+                "tokenHash": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.ImportRepositoryRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.LocalPairRequest": {
+            "type": "object",
+            "properties": {
+                "masterPassword": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.PairExchangeRequest": {
+            "type": "object",
+            "properties": {
+                "deviceName": {
+                    "type": "string"
+                },
+                "masterPassword": {
+                    "type": "string"
+                },
+                "sessionId": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.PairExchangeResponse": {
+            "type": "object",
+            "properties": {
+                "deviceId": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.PairSessionResponse": {
+            "type": "object",
+            "properties": {
+                "expiresAt": {
+                    "type": "string"
+                },
+                "sessionId": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.Author": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "john@example.com"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                }
+            }
+        },
+        "models.Branch": {
+            "type": "object",
+            "properties": {
+                "is_current": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "is_remote": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "last_commit": {
+                    "$ref": "#/definitions/models.Commit"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "feature/new-feature"
+                },
+                "upstream": {
+                    "type": "string",
+                    "example": "origin/main"
+                }
+            }
+        },
+        "models.Commit": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "$ref": "#/definitions/models.Author"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "hash": {
+                    "type": "string",
+                    "example": "abc123def456..."
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Fix bug in authentication"
+                },
+                "parent_hash": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.CommitDetail": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "$ref": "#/definitions/models.Author"
+                },
+                "changes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.FileDiff"
+                    }
+                },
+                "date": {
+                    "type": "string"
+                },
+                "hash": {
+                    "type": "string",
+                    "example": "abc123def456..."
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Fix bug in authentication"
+                },
+                "parent_hash": {
+                    "type": "string"
+                },
+                "stats": {
+                    "$ref": "#/definitions/models.DiffStats"
+                }
+            }
+        },
+        "models.CommitRequest": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "$ref": "#/definitions/models.Author"
+                },
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Fix typo in README"
+                }
+            }
+        },
+        "models.CreateRepositoryRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "example": "A new repository"
+                },
+                "is_local": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "name": {
+                    "type": "string",
+                    "example": "my-new-repo"
+                },
+                "path": {
+                    "type": "string",
+                    "example": "/home/user/projects/my-repo"
+                },
+                "url": {
+                    "type": "string",
+                    "example": "https://github.com/user/repo.git"
+                }
+            }
+        },
+        "models.DiffBlock": {
+            "type": "object",
+            "properties": {
+                "collapsed": {
+                    "description": "true if context block \u003e= 6 lines",
+                    "type": "boolean"
+                },
+                "endNew": {
+                    "description": "last new line number (0 if N/A)",
+                    "type": "integer"
+                },
+                "endOld": {
+                    "description": "last old line number (0 if N/A)",
+                    "type": "integer"
+                },
+                "lines": {
+                    "description": "all lines in this block",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.DiffLineTokenized"
+                    }
+                },
+                "startNew": {
+                    "description": "first new line number (0 if N/A)",
+                    "type": "integer"
+                },
+                "startOld": {
+                    "description": "first old line number (0 if N/A)",
+                    "type": "integer"
+                },
+                "type": {
+                    "description": "\"added\" | \"deleted\" | \"context\"",
+                    "type": "string"
+                }
+            }
+        },
+        "models.DiffHunk": {
+            "type": "object",
+            "properties": {
+                "lines": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.DiffLine"
+                    }
+                },
+                "new_count": {
+                    "type": "integer",
+                    "example": 7
+                },
+                "new_start": {
+                    "type": "integer",
+                    "example": 12
+                },
+                "old_count": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "old_start": {
+                    "type": "integer",
+                    "example": 10
+                }
+            }
+        },
+        "models.DiffHunkTokenized": {
+            "type": "object",
+            "properties": {
+                "blocks": {
+                    "description": "grouped lines",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.DiffBlock"
+                    }
+                },
+                "header": {
+                    "description": "\"@@ -14,8 +14,10 @@\"",
+                    "type": "string"
+                }
+            }
+        },
+        "models.DiffLine": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "example": "func main() {}"
+                },
+                "new_line": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "old_line": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "type": {
+                    "type": "string",
+                    "example": "added"
+                }
+            }
+        },
+        "models.DiffLineTokenized": {
+            "type": "object",
+            "properties": {
+                "newNum": {
+                    "type": "integer"
+                },
+                "oldNum": {
+                    "type": "integer"
+                },
+                "tokens": {
+                    "description": "syntax-highlighted fragments",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Token"
+                    }
+                },
+                "type": {
+                    "description": "\"added\" | \"deleted\" | \"context\"",
+                    "type": "string"
+                }
+            }
+        },
+        "models.DiffResult": {
+            "type": "object",
+            "properties": {
+                "hunks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.DiffHunk"
+                    }
+                },
+                "new_file": {
+                    "type": "string",
+                    "example": "src/new.go"
+                },
+                "old_file": {
+                    "type": "string",
+                    "example": "src/old.go"
+                }
+            }
+        },
+        "models.DiffStats": {
+            "type": "object",
+            "properties": {
+                "additions": {
+                    "type": "integer",
+                    "example": 10
+                },
+                "deletions": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "files_changed": {
+                    "type": "integer",
+                    "example": 2
+                }
+            }
+        },
+        "models.DirectoryEntry": {
+            "type": "object",
+            "properties": {
+                "is_directory": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "is_git_repo": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "is_hidden": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "mod_time": {
+                    "type": "string",
+                    "example": "2024-01-15T10:30:00Z"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "my-project"
+                },
+                "path": {
+                    "type": "string",
+                    "example": "/home/user/projects/my-project"
+                },
+                "permissions": {
+                    "type": "string",
+                    "example": "drwxr-xr-x"
+                },
+                "size": {
+                    "type": "integer",
+                    "example": 4096
+                }
+            }
+        },
+        "models.DirectoryListing": {
+            "type": "object",
+            "properties": {
+                "can_go_up": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "current_path": {
+                    "type": "string",
+                    "example": "/home/user/projects"
+                },
+                "entries": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.DirectoryEntry"
+                    }
+                },
+                "parent_path": {
+                    "type": "string",
+                    "example": "/home/user"
+                }
+            }
+        },
+        "models.FileChange": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "example": "src/main.go"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "modified"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "A"
+                }
+            }
+        },
+        "models.FileDiff": {
+            "type": "object",
+            "properties": {
+                "additions": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "change_type": {
+                    "type": "string",
+                    "example": "modified"
+                },
+                "deletions": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "patch": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string",
+                    "example": "src/auth.go"
+                }
+            }
+        },
+        "models.FileInfo": {
+            "type": "object",
+            "properties": {
+                "is_directory": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "mod_time": {
+                    "type": "string"
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "main.go"
+                },
+                "path": {
+                    "type": "string",
+                    "example": "src/main.go"
+                },
+                "size": {
+                    "type": "integer",
+                    "example": 1024
+                }
+            }
+        },
+        "models.GenerateCommitMessageResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "Fix: Handle null pointer in auth flow"
+                }
+            }
+        },
+        "models.GitConfig": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "john@example.com"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                }
+            }
+        },
+        "models.RepoCommitSettings": {
+            "type": "object",
+            "properties": {
+                "defaultBranch": {
+                    "type": "string",
+                    "example": "main"
+                },
+                "lineEndings": {
+                    "type": "string",
+                    "example": "lf"
+                },
+                "signingEnabled": {
+                    "type": "boolean",
+                    "example": false
+                }
+            }
+        },
+        "models.RepoDirectoryListing": {
+            "type": "object",
+            "properties": {
+                "entries": {
+                    "description": "Files and directories in current path",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.FileInfo"
+                    }
+                },
+                "has_more": {
+                    "description": "True if more entries exist",
+                    "type": "boolean",
+                    "example": true
+                },
+                "offset": {
+                    "description": "Current pagination offset",
+                    "type": "integer",
+                    "example": 0
+                },
+                "parent_path": {
+                    "description": "Parent directory (empty if root)",
+                    "type": "string",
+                    "example": "src"
+                },
+                "path": {
+                    "description": "Current directory path (empty for root)",
+                    "type": "string",
+                    "example": "src/components"
+                },
+                "total_count": {
+                    "description": "Total entries in directory (before pagination)",
+                    "type": "integer",
+                    "example": 42
+                }
+            }
+        },
+        "models.RepoIdentitySettings": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "john@example.com"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                }
+            }
+        },
+        "models.RepoRemote": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "example": "origin"
+                },
+                "url": {
+                    "type": "string",
+                    "example": "https://github.com/user/repo.git"
+                }
+            }
+        },
+        "models.RepoSettings": {
+            "type": "object",
+            "properties": {
+                "commit": {
+                    "$ref": "#/definitions/models.RepoCommitSettings"
+                },
+                "identity": {
+                    "$ref": "#/definitions/models.RepoIdentitySettings"
+                },
+                "remotes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.RepoRemote"
+                    }
+                },
+                "sync": {
+                    "$ref": "#/definitions/models.RepoSyncSettings"
+                }
+            }
+        },
+        "models.RepoSyncSettings": {
+            "type": "object",
+            "properties": {
+                "autoFetch": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "fetchIntervalMinutes": {
+                    "type": "integer",
+                    "example": 15
+                },
+                "pullStrategy": {
+                    "type": "string",
+                    "example": "merge"
+                }
+            }
+        },
+        "models.Repository": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "current_branch": {
+                    "type": "string",
+                    "example": "main"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "My awesome project"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "repo-abc123"
+                },
+                "is_local": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "name": {
+                    "type": "string",
+                    "example": "my-project"
+                },
+                "path": {
+                    "type": "string",
+                    "example": "/Users/john/.gitty/repositories/my-project"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string",
+                    "example": "https://github.com/user/repo.git"
+                }
+            }
+        },
+        "models.RepositoryStatus": {
+            "type": "object",
+            "properties": {
+                "ahead": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "behind": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "branch": {
+                    "type": "string",
+                    "example": "main"
+                },
+                "conflicts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "is_clean": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "modified": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.FileChange"
+                    }
+                },
+                "repository_id": {
+                    "type": "string",
+                    "example": "repo-abc123"
+                },
+                "staged": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.FileChange"
+                    }
+                },
+                "untracked": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "models.Token": {
+            "type": "object",
+            "properties": {
+                "color": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.TokenizedCommitDiff": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "$ref": "#/definitions/models.Author"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.TokenizedFileDiff"
+                    }
+                },
+                "hash": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "stats": {
+                    "$ref": "#/definitions/models.DiffStats"
+                }
+            }
+        },
+        "models.TokenizedDiff": {
+            "type": "object",
+            "properties": {
+                "additions": {
+                    "type": "integer"
+                },
+                "deletions": {
+                    "type": "integer"
+                },
+                "filename": {
+                    "type": "string"
+                },
+                "has_more": {
+                    "type": "boolean"
+                },
+                "hunks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.DiffHunkTokenized"
+                    }
+                },
+                "next_cursor": {
+                    "type": "integer"
+                },
+                "total_hunks": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.TokenizedFileDiff": {
+            "type": "object",
+            "properties": {
+                "changeType": {
+                    "description": "\"added\" | \"modified\" | \"deleted\"",
+                    "type": "string"
+                },
+                "diff": {
+                    "$ref": "#/definitions/models.TokenizedDiff"
+                },
+                "path": {
+                    "type": "string"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "description": "Enter \"Bearer \u003ctoken\u003e\" where \u003ctoken\u003e is obtained from the /api/auth/pair/exchange endpoint",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
+    }
+}
