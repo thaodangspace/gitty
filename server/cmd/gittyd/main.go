@@ -1,3 +1,23 @@
+// @title           Gittyd API
+// @version         1.0
+// @description     GitWeb's backend API for managing Git repositories and browsing the local filesystem.
+// @description     This API provides endpoints for repository management, branch/commit operations, file management, and remote sync.
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name   API Support
+// @contact.email  support@gitty.local
+
+// @license.name   MIT
+// @license.url    https://opensource.org/licenses/MIT
+
+// @host           localhost:8083
+// @BasePath       /
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Enter "Bearer <token>" where <token> is obtained from the /api/auth/pair/exchange endpoint
+
 package main
 
 import (
@@ -20,6 +40,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/mdp/qrterminal/v3"
+
+	// _ "gitweb/docs" // swagger docs - uncomment after running swag init
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 func main() {
@@ -134,6 +157,9 @@ func main() {
 	apiRouter := api.NewRouter(appCtx, dataPath, cfg, reg, pairingManager, tokenStore, authHandler)
 
 	r := chi.NewRouter()
+
+	// Swagger UI will be mounted here in Task 3
+	_ = httpSwagger.WrapHandler
 
 	// Health endpoint is mounted in apiRouter, but we add a simple one here too
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
