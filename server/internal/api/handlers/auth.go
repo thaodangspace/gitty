@@ -69,6 +69,16 @@ type PairSessionResponse struct {
 
 // GetPairSession handles GET /api/auth/pair/session.
 // It returns the current pairing session information for QR code scanning.
+//
+// @Summary      Get current pairing session
+// @Description  Returns the current pairing session information for QR code scanning
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Success      200 {object} PairSessionResponse
+// @Failure      503 {string} string "no active pairing session"
+// @Failure      410 {string} string "session expired or invalid"
+// @Router       /api/auth/pair/session [get]
 func (h *AuthHandler) GetPairSession(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -100,6 +110,17 @@ func (h *AuthHandler) GetPairSession(w http.ResponseWriter, r *http.Request) {
 
 // PairExchange handles POST /api/auth/pair/exchange.
 // It validates the session and master password, then issues a new device token.
+//
+// @Summary      Exchange pairing session for token
+// @Description  Validates the session and master password, then issues a new device token
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        request body PairExchangeRequest true "Pair exchange request"
+// @Success      200 {object} PairExchangeResponse
+// @Failure      400 {string} string "invalid JSON or missing required fields"
+// @Failure      401 {string} string "unauthorized"
+// @Router       /api/auth/pair/exchange [post]
 func (h *AuthHandler) PairExchange(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -155,6 +176,14 @@ func (h *AuthHandler) PairExchange(w http.ResponseWriter, r *http.Request) {
 
 // ListDevices handles GET /api/auth/devices.
 // It returns all device records without including token hashes.
+//
+// @Summary      List paired devices
+// @Description  Returns all device records without including token hashes. Requires Bearer auth.
+// @Tags         auth
+// @Produce      json
+// @Success      200 {array} auth.DeviceRecord
+// @Security     BearerAuth
+// @Router       /api/auth/devices [get]
 func (h *AuthHandler) ListDevices(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -183,6 +212,18 @@ type LocalPairRequest struct {
 // LocalPair handles POST /api/auth/local/pair.
 // It issues a device token for localhost connections after validating the master password.
 // This is a simplified flow for the web frontend that runs on the same host.
+//
+// @Summary      Localhost-only pairing
+// @Description  Issues a device token for localhost connections after validating the master password. This is a simplified flow for the web frontend.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        request body LocalPairRequest true "Local pair request"
+// @Success      200 {object} PairExchangeResponse
+// @Failure      403 {string} string "forbidden"
+// @Failure      400 {string} string "missing masterPassword"
+// @Failure      401 {string} string "unauthorized"
+// @Router       /api/auth/local/pair [post]
 func (h *AuthHandler) LocalPair(w http.ResponseWriter, r *http.Request) {
 	// Only allow from localhost
 	if !isLocalhost(r) {
@@ -236,6 +277,16 @@ func isLocalhost(r *http.Request) bool {
 
 // RevokeDevice handles DELETE /api/auth/devices/{deviceId}.
 // It revokes the device token and returns 204 No Content on success.
+//
+// @Summary      Revoke a device
+// @Description  Revokes the device token. Returns 204 No Content on success.
+// @Tags         auth
+// @Param        deviceId path string true "Device ID"
+// @Success      204 "No Content"
+// @Failure      400 {string} string "deviceId required"
+// @Failure      404 {string} string "device not found"
+// @Security     BearerAuth
+// @Router       /api/auth/devices/{deviceId} [delete]
 func (h *AuthHandler) RevokeDevice(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
