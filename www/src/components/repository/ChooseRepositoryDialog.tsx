@@ -26,9 +26,9 @@ export default function ChooseRepositoryDialog() {
     const [isPathReadonly, setIsPathReadonly] = useState(true);
     const isMobile = useIsMobile();
 
-    const { data: repositories } = useRepositories();
-    const { data: directoryListing, isLoading, error } = useDirectoryBrowse(currentDirectory);
-    const { data: volumeRoots } = useVolumeRoots();
+    const { data: repositories } = useRepositories(showDialog);
+    const { data: directoryListing, isLoading, error } = useDirectoryBrowse(showDialog ? currentDirectory : undefined);
+    const { data: volumeRoots } = useVolumeRoots(showDialog);
     const importRepository = useImportRepository();
 
     const handleRepositorySelect = (repo: Repository) => {

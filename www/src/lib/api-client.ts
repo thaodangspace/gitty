@@ -17,6 +17,18 @@ import type {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE || "http://localhost:8080";
 
+// Helper to get a cookie value by name
+function getCookie(name: string): string | null {
+  const cookies = document.cookie.split(';');
+  for (const cookie of cookies) {
+    const [cookieName, cookieValue] = cookie.trim().split('=');
+    if (cookieName === name) {
+      return decodeURIComponent(cookieValue);
+    }
+  }
+  return null;
+}
+
 class ApiClient {
   private async request<T>(
     endpoint: string,
@@ -25,9 +37,13 @@ class ApiClient {
     const url = `${API_BASE_URL}${endpoint}`;
     console.log("API Client - Making request to:", url);
 
+    // Get token from cookie first, fallback to localStorage
+    const token = getCookie("gitty_auth_token") || localStorage.getItem("gitty_auth_token");
+
     const config: RequestInit = {
       headers: {
         "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...options.headers,
       },
       ...options,
@@ -40,6 +56,18 @@ class ApiClient {
       if (!response.ok) {
         const errorText = await response.text();
         console.error("API Client - Error response:", errorText);
+
+        // Handle 401 - clear token from cookies and localStorage, then redirect to login
+        if (response.status === 401) {
+          // Clear cookies
+          document.cookie = "gitty_auth_token=; path=/; max-age=0;";
+          document.cookie = "gitty_auth_device_id=; path=/; max-age=0;";
+          // Clear localStorage
+          localStorage.removeItem("gitty_auth_token");
+          localStorage.removeItem("gitty_auth_device_id");
+          window.location.href = "/login";
+        }
+
         throw new ApiError({
           message:
             errorText || `HTTP ${response.status}: ${response.statusText}`,
@@ -207,8 +235,14 @@ class ApiClient {
 
   async getFileContent(id: string, filePath: string): Promise<string> {
     const encodedPath = encodeURIComponent(filePath);
+    const token = getCookie("gitty_auth_token") || localStorage.getItem("gitty_auth_token");
     const response = await fetch(
       `${API_BASE_URL}/repos/${id}/files/${encodedPath}`,
+      {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      },
     );
     if (!response.ok) {
       throw new ApiError({
@@ -236,7 +270,12 @@ class ApiClient {
 
   async getFileDiff(id: string, filePath: string): Promise<string> {
     const encodedPath = encodeURIComponent(filePath);
-    const response = await fetch(`/repos/${id}/diff/${encodedPath}`);
+    const token = getCookie("gitty_auth_token") || localStorage.getItem("gitty_auth_token");
+    const response = await fetch(`${API_BASE_URL}/repos/${id}/diff/${encodedPath}`, {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
     if (!response.ok) {
       throw new ApiError({
         message: `Failed to fetch diff: ${response.statusText}`,

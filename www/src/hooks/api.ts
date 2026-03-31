@@ -33,10 +33,11 @@ const triggerRepositoryStatus = async (
 };
 
 // Repository queries
-export const useRepositories = () => {
+export const useRepositories = (enabled = true) => {
     return useQuery({
         queryKey: queryKeys.repositories,
         queryFn: () => apiClient.getRepositories(),
+        enabled: !!enabled,
     });
 };
 
@@ -102,13 +103,15 @@ export const useDirectoryBrowse = (path?: string) => {
     return useQuery({
         queryKey: queryKeys.directoryBrowse(path),
         queryFn: () => apiClient.browseDirectory(path),
+        enabled: path !== undefined,
     });
 };
 
-export const useVolumeRoots = () => {
+export const useVolumeRoots = (enabled = true) => {
     return useQuery({
         queryKey: queryKeys.volumeRoots,
         queryFn: () => apiClient.getVolumeRoots(),
+        enabled: !!enabled,
     });
 };
 

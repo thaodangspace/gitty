@@ -3,7 +3,11 @@ package handlers
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
+	"log"
+	"net"
 	"net/http"
+	"time"
 
 	"gitweb/server/internal/auth"
 
@@ -12,9 +16,10 @@ import (
 
 // AuthHandler handles authentication-related HTTP endpoints.
 type AuthHandler struct {
-	pairingManager *auth.PairingManager
-	tokenStore     *auth.TokenStore
-	masterPassword string
+	pairingManager  *auth.PairingManager
+	tokenStore      *auth.TokenStore
+	masterPassword  string
+	currentSessionID string // Session ID created at startup for QR code
 }
 
 // NewAuthHandler creates a new AuthHandler with the given dependencies.
@@ -23,6 +28,23 @@ func NewAuthHandler(pm *auth.PairingManager, ts *auth.TokenStore, masterPassword
 		pairingManager: pm,
 		tokenStore:     ts,
 		masterPassword: masterPassword,
+		currentSessionID: "", // Will be set via SetCurrentSessionID
+	}
+}
+
+// SetCurrentSessionID sets the current pairing session ID (called after startup session creation)
+func (h *AuthHandler) SetCurrentSessionID(sessionID string) {
+	h.currentSessionID = sessionID
+}
+
+// NewAuthHandlerWithSession creates a new AuthHandler with an active session ID.
+// This is used when the server creates a pairing session at startup.
+func NewAuthHandlerWithSession(pm *auth.PairingManager, ts *auth.TokenStore, masterPassword string, sessionID string) *AuthHandler {
+	return &AuthHandler{
+		pairingManager:   pm,
+		tokenStore:       ts,
+		masterPassword:   masterPassword,
+		currentSessionID: sessionID,
 	}
 }
 
@@ -37,6 +59,43 @@ type PairExchangeRequest struct {
 type PairExchangeResponse struct {
 	Token      string `json:"token"`
 	DeviceID   string `json:"deviceId"`
+}
+
+// PairSessionResponse represents the JSON response for the pair session endpoint.
+type PairSessionResponse struct {
+	SessionID string `json:"sessionId"`
+	ExpiresAt string `json:"expiresAt"`
+}
+
+// GetPairSession handles GET /api/auth/pair/session.
+// It returns the current pairing session information for QR code scanning.
+func (h *AuthHandler) GetPairSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.currentSessionID == "" {
+		http.Error(w, "no active pairing session", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Validate the session is still active (not expired or used)
+	sess, err := h.pairingManager.Validate(h.currentSessionID)
+	if err != nil {
+		http.Error(w, "session expired or invalid", http.StatusGone)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(PairSessionResponse{
+		SessionID: sess.SessionID,
+		ExpiresAt: sess.ExpiresAt.Format(time.RFC3339),
+	}); err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 // PairExchange handles POST /api/auth/pair/exchange.
@@ -60,6 +119,7 @@ func (h *AuthHandler) PairExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Constant-time comparison of master password
+	log.Printf("[DEBUG] received password: %q, expected: %q", req.MasterPassword, h.masterPassword)
 	if subtle.ConstantTimeCompare([]byte(req.MasterPassword), []byte(h.masterPassword)) != 1 {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -113,6 +173,65 @@ func (h *AuthHandler) ListDevices(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 		return
 	}
+}
+
+// LocalPairRequest represents the JSON body for the local pairing endpoint.
+type LocalPairRequest struct {
+	MasterPassword string `json:"masterPassword"`
+}
+
+// LocalPair handles POST /api/auth/local/pair.
+// It issues a device token for localhost connections after validating the master password.
+// This is a simplified flow for the web frontend that runs on the same host.
+func (h *AuthHandler) LocalPair(w http.ResponseWriter, r *http.Request) {
+	// Only allow from localhost
+	if !isLocalhost(r) {
+		http.Error(w, "forbidden: localhost only", http.StatusForbidden)
+		return
+	}
+
+	var req LocalPairRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.MasterPassword == "" {
+		http.Error(w, "masterPassword is required", http.StatusBadRequest)
+		return
+	}
+
+	// Constant-time comparison of master password
+	if subtle.ConstantTimeCompare([]byte(req.MasterPassword), []byte(h.masterPassword)) != 1 {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	deviceName := fmt.Sprintf("web-%d", time.Now().Unix())
+	rawToken, rec, err := h.tokenStore.IssueToken(deviceName)
+	if err != nil {
+		http.Error(w, "failed to issue token", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(PairExchangeResponse{
+		Token:    rawToken,
+		DeviceID: rec.DeviceID,
+	}); err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
+}
+
+// isLocalhost checks whether the request originated from the loopback interface.
+func isLocalhost(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	return host == "127.0.0.1" || host == "::1" || host == "localhost"
 }
 
 // RevokeDevice handles DELETE /api/auth/devices/{deviceId}.

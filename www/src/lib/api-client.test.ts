@@ -3,13 +3,41 @@ import { apiClient } from './api-client';
 
 describe('ApiClient - getTokenizedFileDiff', () => {
   const originalFetch = global.fetch;
+  const originalLocalStorage = global.localStorage;
+  const originalDocument = global.document;
 
   beforeEach(() => {
     global.fetch = vi.fn();
+
+    // Mock localStorage
+    Object.defineProperty(global, 'localStorage', {
+      value: {
+        getItem: vi.fn(),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+      },
+      writable: true,
+    });
+
+    // Mock document.cookie
+    Object.defineProperty(global, 'document', {
+      value: {
+        cookie: '',
+      },
+      writable: true,
+    });
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
+    Object.defineProperty(global, 'localStorage', {
+      value: originalLocalStorage,
+      writable: true,
+    });
+    Object.defineProperty(global, 'document', {
+      value: originalDocument,
+      writable: true,
+    });
   });
 
   it('fetches tokenized diff with correct URL and parameters', async () => {

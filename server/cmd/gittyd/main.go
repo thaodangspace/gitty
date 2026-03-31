@@ -12,12 +12,14 @@ import (
 	"time"
 
 	"gitweb/server/internal/api"
+	"gitweb/server/internal/api/handlers"
 	"gitweb/server/internal/auth"
 	"gitweb/server/internal/config"
 	"gitweb/server/internal/registry"
 	"gitweb/server/internal/resources"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/mdp/qrterminal/v3"
 )
 
 func main() {
@@ -95,15 +97,41 @@ func main() {
 
 	pairingManager := auth.NewPairingManager(auth.DefaultPairSessionTTL)
 
+	// Determine port early for QR payload
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8083"
+	}
+
 	// Create initial pairing session and print QR payload
 	session, err := pairingManager.CreateSession()
 	if err != nil {
 		log.Fatalf("Failed to create pairing session: %v", err)
 	}
-	qrPayload := fmt.Sprintf("gitty-pair://session?id=%s", session.SessionID)
-	log.Printf("Pairing session: %s", qrPayload)
 
-	apiRouter := api.NewRouter(appCtx, dataPath, cfg, reg, pairingManager, tokenStore)
+	// Build QR payload with network-reachable URL
+	baseURL := os.Getenv("GITTY_BASE_URL")
+	if baseURL == "" {
+		// Try to detect local IP
+		hostname, _ := os.Hostname()
+		baseURL = fmt.Sprintf("http://%s:%s", hostname, port)
+	}
+	qrPayload := fmt.Sprintf(`{"baseUrl":"%s","sessionId":"%s","expiresAt":"%s"}`,
+		baseURL,
+		session.SessionID,
+		session.ExpiresAt.Format(time.RFC3339))
+
+	// Render ASCII QR code to stderr (so it doesn't interfere with regular logs)
+	log.Println("Scan this QR code to pair your device:")
+	qrterminal.GenerateHalfBlock(qrPayload, qrterminal.L, os.Stderr)
+
+	// Also print plain-text fallback
+	log.Printf("Plain-text pairing payload: %s", qrPayload)
+
+	// Initialize auth handler with the current session ID
+	authHandler := handlers.NewAuthHandlerWithSession(pairingManager, tokenStore, *cfg.MasterPassword, session.SessionID)
+
+	apiRouter := api.NewRouter(appCtx, dataPath, cfg, reg, pairingManager, tokenStore, authHandler)
 
 	r := chi.NewRouter()
 
@@ -115,11 +143,6 @@ func main() {
 	})
 
 	r.Mount("/", apiRouter)
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8083"
-	}
 
 	srv := &http.Server{
 		Addr:    ":" + port,

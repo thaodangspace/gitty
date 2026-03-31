@@ -13,7 +13,7 @@ import (
 	"github.com/go-chi/cors"
 )
 
-func NewRouter(ctx context.Context, dataPath string, cfg *config.Config, reg *registry.Registry, pm *auth.PairingManager, ts *auth.TokenStore) *chi.Mux {
+func NewRouter(ctx context.Context, dataPath string, cfg *config.Config, reg *registry.Registry, pm *auth.PairingManager, ts *auth.TokenStore, authHandler *handlers.AuthHandler) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(cors.Handler(cors.Options{
@@ -39,18 +39,16 @@ func NewRouter(ctx context.Context, dataPath string, cfg *config.Config, reg *re
 	repoHandler := newRepoHandler(ctx, dataPath, cfg, reg)
 	fsHandler := newFsHandler()
 
-	// Auth handler requires master password - use empty string if not configured
-	// (in production this should always be set via RequireMasterPassword)
-	masterPassword := ""
-	if cfg != nil && cfg.MasterPassword != nil {
-		masterPassword = *cfg.MasterPassword
-	}
-	authHandler := handlers.NewAuthHandler(pm, ts, masterPassword)
+	// Auth handler is passed from main.go with session ID already set
 
 	// Public auth routes (no bearer required)
 	r.Route("/api/auth", func(r chi.Router) {
 		// Pair exchange endpoint is public for initial device pairing
 		r.Post("/pair/exchange", authHandler.PairExchange)
+		// Pair session endpoint - returns current session info for QR scanning
+		r.Get("/pair/session", authHandler.GetPairSession)
+		// Local-only pairing for web frontend (localhost only)
+		r.Post("/local/pair", authHandler.LocalPair)
 	})
 
 	// Protected routes (bearer required)
