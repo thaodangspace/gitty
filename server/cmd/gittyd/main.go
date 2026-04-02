@@ -41,7 +41,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/mdp/qrterminal/v3"
 
-	// _ "gitweb/docs" // swagger docs - uncomment after running swag init
+	_ "gitweb/server/docs" // swagger docs
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 

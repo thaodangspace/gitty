@@ -15,13 +15,20 @@ import (
 
 // DeviceTokenRecord holds the persisted record for a single device token.
 // The raw token is never stored; only its SHA-256 hash is persisted.
+// @swagger:model
 type DeviceTokenRecord struct {
-	DeviceID   string     `json:"deviceId"`
-	DeviceName string     `json:"deviceName"`
-	TokenHash  string     `json:"tokenHash"`
-	CreatedAt  time.Time  `json:"createdAt"`
+	// Device unique identifier
+	DeviceID string `json:"deviceId"`
+	// Human-readable device name
+	DeviceName string `json:"deviceName"`
+	// SHA-256 hash of the bearer token (hex-encoded)
+	TokenHash string `json:"tokenHash"`
+	// Token creation time in RFC3339 format
+	CreatedAt time.Time `json:"createdAt"`
+	// Last time the token was used for authentication in RFC3339 format
 	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
-	RevokedAt  *time.Time `json:"revokedAt,omitempty"`
+	// Time when the token was revoked in RFC3339 format
+	RevokedAt *time.Time `json:"revokedAt,omitempty"`
 }
 
 // TokenStore manages per-device bearer tokens with file-backed persistence.

@@ -181,7 +181,7 @@ func (h *AuthHandler) PairExchange(w http.ResponseWriter, r *http.Request) {
 // @Description  Returns all device records without including token hashes. Requires Bearer auth.
 // @Tags         auth
 // @Produce      json
-// @Success      200 {array} auth.DeviceRecord
+// @Success      200 {array} auth.DeviceTokenRecord
 // @Security     BearerAuth
 // @Router       /api/auth/devices [get]
 func (h *AuthHandler) ListDevices(w http.ResponseWriter, r *http.Request) {

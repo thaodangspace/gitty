@@ -764,7 +764,7 @@ func (h *RepositoryHandler) GetFileTree(w http.ResponseWriter, r *http.Request) 
 // @Success      200   {string} string  "File content"
 // @Failure      404   {string} string  "Repository or file not found"
 // @Security     BearerAuth
-// @Router       /api/repos/{id}/files/* [get]
+// @Router       /api/repos/{id}/files/{filepath} [get]
 func (h *RepositoryHandler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
@@ -802,7 +802,7 @@ func (h *RepositoryHandler) GetFileContent(w http.ResponseWriter, r *http.Reques
 // @Failure      400   {string} string  "Bad request"
 // @Failure      404   {string} string  "Repository not found"
 // @Security     BearerAuth
-// @Router       /api/repos/{id}/files/* [put]
+// @Router       /api/repos/{id}/files/{filepath} [put]
 func (h *RepositoryHandler) SaveFileContent(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
@@ -1022,7 +1022,7 @@ func (h *RepositoryHandler) Pull(w http.ResponseWriter, r *http.Request) {
 // @Success      200   {string} string  "Success"
 // @Failure      404   {string} string  "Repository not found"
 // @Security     BearerAuth
-// @Router       /api/repos/{id}/stage/* [post]
+// @Router       /api/repos/{id}/stage/{filepath} [post]
 func (h *RepositoryHandler) StageFile(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
@@ -1088,7 +1088,7 @@ func (h *RepositoryHandler) StageAllFiles(w http.ResponseWriter, r *http.Request
 // @Success      200   {string} string  "Success"
 // @Failure      404   {string} string  "Repository not found"
 // @Security     BearerAuth
-// @Router       /api/repos/{id}/stage/* [delete]
+// @Router       /api/repos/{id}/stage/{filepath} [delete]
 func (h *RepositoryHandler) UnstageFile(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")
@@ -1204,7 +1204,7 @@ func (h *RepositoryHandler) DeleteBranch(w http.ResponseWriter, r *http.Request)
 // @Failure      400   {string} string "Bad request"
 // @Failure      404   {string} string "Repository not found"
 // @Security     BearerAuth
-// @Router       /api/repos/{id}/diff/* [get]
+// @Router       /api/repos/{id}/diff/{filepath} [get]
 func (h *RepositoryHandler) GetFileDiff(w http.ResponseWriter, r *http.Request) {
 	repoID := chi.URLParam(r, "id")
 	filePath := chi.URLParam(r, "*")

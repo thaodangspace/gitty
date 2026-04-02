@@ -48,7 +48,7 @@ func (h *FilesystemHandler) BrowseDirectory(w http.ResponseWriter, r *http.Reque
 // @Description  List allowed root paths/volumes
 // @Tags         filesystem
 // @Produce      json
-// @Success      200    {object} map[string][]string{roots: []string}
+// @Success      200    {object} map[string][]string
 // @Security     BearerAuth
 // @Router       /api/filesystem/roots [get]
 func (h *FilesystemHandler) GetVolumeRoots(w http.ResponseWriter, r *http.Request) {

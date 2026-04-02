@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"gitweb/server/internal/api/handlers"
 	"gitweb/server/internal/auth"
 	"gitweb/server/internal/config"
 	"gitweb/server/internal/models"
@@ -28,7 +29,8 @@ func TestNewRouterListRepositories(t *testing.T) {
 		t.Fatalf("failed to issue token: %v", err)
 	}
 
-	r := NewRouter(context.Background(), tempDir, cfg, reg, pm, ts)
+	authHandler := handlers.NewAuthHandlerWithSession(pm, ts, masterPassword, "")
+	r := NewRouter(context.Background(), tempDir, cfg, reg, pm, ts, authHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/repos", nil)
 	req.Header.Set("Authorization", "Bearer "+rawToken)
@@ -59,7 +61,8 @@ func TestHealthEndpointOpenWithoutBearer(t *testing.T) {
 	ts, _ := auth.NewTokenStore(tempDir + "/tokens.json")
 	reg, _ := registry.New(tempDir + "/registry.json")
 
-	r := NewRouter(context.Background(), tempDir, cfg, reg, pm, ts)
+	authHandler := handlers.NewAuthHandlerWithSession(pm, ts, masterPassword, "")
+	r := NewRouter(context.Background(), tempDir, cfg, reg, pm, ts, authHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rr := httptest.NewRecorder()
@@ -80,7 +83,8 @@ func TestAuthPairExchangeOpenWithoutBearer(t *testing.T) {
 	cfg.MasterPassword = &masterPassword
 	reg, _ := registry.New(tempDir + "/registry.json")
 
-	r := NewRouter(context.Background(), tempDir, cfg, reg, pm, ts)
+	authHandler := handlers.NewAuthHandlerWithSession(pm, ts, masterPassword, "")
+	r := NewRouter(context.Background(), tempDir, cfg, reg, pm, ts, authHandler)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/pair/exchange", nil)
 	rr := httptest.NewRecorder()
@@ -102,7 +106,8 @@ func TestApiReposRequiresBearer(t *testing.T) {
 	cfg.MasterPassword = &masterPassword
 	reg, _ := registry.New(tempDir + "/registry.json")
 
-	r := NewRouter(context.Background(), tempDir, cfg, reg, pm, ts)
+	authHandler := handlers.NewAuthHandlerWithSession(pm, ts, masterPassword, "")
+	r := NewRouter(context.Background(), tempDir, cfg, reg, pm, ts, authHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/repos", nil)
 	rr := httptest.NewRecorder()

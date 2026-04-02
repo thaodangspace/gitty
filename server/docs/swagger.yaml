@@ -3,16 +3,22 @@ definitions:
   auth.DeviceTokenRecord:
     properties:
       createdAt:
+        description: Token creation time in RFC3339 format
         type: string
       deviceId:
+        description: Device unique identifier
         type: string
       deviceName:
+        description: Human-readable device name
         type: string
       lastUsedAt:
+        description: Last time the token was used for authentication in RFC3339 format
         type: string
       revokedAt:
+        description: Time when the token was revoked in RFC3339 format
         type: string
       tokenHash:
+        description: SHA-256 hash of the bearer token (hex-encoded)
         type: string
     type: object
   handlers.ImportRepositoryRequest:
@@ -142,32 +148,6 @@ definitions:
         example: https://github.com/user/repo.git
         type: string
     type: object
-  models.DiffBlock:
-    properties:
-      collapsed:
-        description: true if context block >= 6 lines
-        type: boolean
-      endNew:
-        description: last new line number (0 if N/A)
-        type: integer
-      endOld:
-        description: last old line number (0 if N/A)
-        type: integer
-      lines:
-        description: all lines in this block
-        items:
-          $ref: '#/definitions/models.DiffLineTokenized'
-        type: array
-      startNew:
-        description: first new line number (0 if N/A)
-        type: integer
-      startOld:
-        description: first old line number (0 if N/A)
-        type: integer
-      type:
-        description: '"added" | "deleted" | "context"'
-        type: string
-    type: object
   models.DiffHunk:
     properties:
       lines:
@@ -187,17 +167,6 @@ definitions:
         example: 10
         type: integer
     type: object
-  models.DiffHunkTokenized:
-    properties:
-      blocks:
-        description: grouped lines
-        items:
-          $ref: '#/definitions/models.DiffBlock'
-        type: array
-      header:
-        description: '"@@ -14,8 +14,10 @@"'
-        type: string
-    type: object
   models.DiffLine:
     properties:
       content:
@@ -211,21 +180,6 @@ definitions:
         type: integer
       type:
         example: added
-        type: string
-    type: object
-  models.DiffLineTokenized:
-    properties:
-      newNum:
-        type: integer
-      oldNum:
-        type: integer
-      tokens:
-        description: syntax-highlighted fragments
-        items:
-          $ref: '#/definitions/models.Token'
-        type: array
-      type:
-        description: '"added" | "deleted" | "context"'
         type: string
     type: object
   models.DiffResult:
@@ -344,33 +298,6 @@ definitions:
         example: 1024
         type: integer
     type: object
-  models.GenerateCommitMessageResponse:
-    properties:
-      message:
-        example: 'Fix: Handle null pointer in auth flow'
-        type: string
-    type: object
-  models.GitConfig:
-    properties:
-      email:
-        example: john@example.com
-        type: string
-      name:
-        example: John Doe
-        type: string
-    type: object
-  models.RepoCommitSettings:
-    properties:
-      defaultBranch:
-        example: main
-        type: string
-      lineEndings:
-        example: lf
-        type: string
-      signingEnabled:
-        example: false
-        type: boolean
-    type: object
   models.RepoDirectoryListing:
     properties:
       entries:
@@ -398,49 +325,6 @@ definitions:
         description: Total entries in directory (before pagination)
         example: 42
         type: integer
-    type: object
-  models.RepoIdentitySettings:
-    properties:
-      email:
-        example: john@example.com
-        type: string
-      name:
-        example: John Doe
-        type: string
-    type: object
-  models.RepoRemote:
-    properties:
-      name:
-        example: origin
-        type: string
-      url:
-        example: https://github.com/user/repo.git
-        type: string
-    type: object
-  models.RepoSettings:
-    properties:
-      commit:
-        $ref: '#/definitions/models.RepoCommitSettings'
-      identity:
-        $ref: '#/definitions/models.RepoIdentitySettings'
-      remotes:
-        items:
-          $ref: '#/definitions/models.RepoRemote'
-        type: array
-      sync:
-        $ref: '#/definitions/models.RepoSyncSettings'
-    type: object
-  models.RepoSyncSettings:
-    properties:
-      autoFetch:
-        example: true
-        type: boolean
-      fetchIntervalMinutes:
-        example: 15
-        type: integer
-      pullStrategy:
-        example: merge
-        type: string
     type: object
   models.Repository:
     properties:
@@ -503,59 +387,6 @@ definitions:
         items:
           type: string
         type: array
-    type: object
-  models.Token:
-    properties:
-      color:
-        type: string
-      text:
-        type: string
-    type: object
-  models.TokenizedCommitDiff:
-    properties:
-      author:
-        $ref: '#/definitions/models.Author'
-      date:
-        type: string
-      files:
-        items:
-          $ref: '#/definitions/models.TokenizedFileDiff'
-        type: array
-      hash:
-        type: string
-      message:
-        type: string
-      stats:
-        $ref: '#/definitions/models.DiffStats'
-    type: object
-  models.TokenizedDiff:
-    properties:
-      additions:
-        type: integer
-      deletions:
-        type: integer
-      filename:
-        type: string
-      has_more:
-        type: boolean
-      hunks:
-        items:
-          $ref: '#/definitions/models.DiffHunkTokenized'
-        type: array
-      next_cursor:
-        type: integer
-      total_hunks:
-        type: integer
-    type: object
-  models.TokenizedFileDiff:
-    properties:
-      changeType:
-        description: '"added" | "modified" | "deleted"'
-        type: string
-      diff:
-        $ref: '#/definitions/models.TokenizedDiff'
-      path:
-        type: string
     type: object
 host: localhost:8083
 info:
@@ -1033,32 +864,7 @@ paths:
       summary: Get commit details
       tags:
       - repositories
-  /api/repos/{id}/config/git:
-    get:
-      description: Get Git configuration for a repository
-      parameters:
-      - description: Repository ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.GitConfig'
-        "404":
-          description: Repository not found
-          schema:
-            type: string
-      security:
-      - BearerAuth: []
-      summary: Get Git config
-      tags:
-      - repositories
-  /api/repos/{id}/diff:
+  /api/repos/{id}/diff/{filepath}:
     get:
       description: Get diff for a file
       parameters:
@@ -1092,118 +898,32 @@ paths:
       summary: Get file diff
       tags:
       - repositories
-  /api/repos/{id}/diff/commit/{hash}/files:
-    get:
-      description: Get diff for a specific file in a commit
-      parameters:
-      - description: Repository ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Commit hash
-        in: path
-        name: hash
-        required: true
-        type: string
-      - description: File path
-        in: path
-        name: '"*"'
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.TokenizedDiff'
-        "400":
-          description: Bad request
-          schema:
-            type: string
-        "404":
-          description: Repository or commit not found
-          schema:
-            type: string
-      security:
-      - BearerAuth: []
-      summary: Get commit file diff
-      tags:
-      - repositories
-  /api/repos/{id}/diff/commit/tokenized:
-    get:
-      description: Get tokenized diff for a commit
-      parameters:
-      - description: Repository ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Commit hash
-        in: query
-        name: hash
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.TokenizedCommitDiff'
-        "400":
-          description: Commit hash is required
-          schema:
-            type: string
-        "404":
-          description: Repository or commit not found
-          schema:
-            type: string
-      security:
-      - BearerAuth: []
-      summary: Get tokenized commit diff
-      tags:
-      - repositories
-  /api/repos/{id}/diff/tokenized:
-    get:
-      description: Get tokenized diff for a file (for syntax highlighting)
-      parameters:
-      - description: Repository ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: File path
-        in: path
-        name: '"*"'
-        required: true
-        type: string
-      - description: Show staged changes
-        in: query
-        name: staged
-        type: boolean
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.TokenizedDiff'
-        "400":
-          description: Bad request
-          schema:
-            type: string
-        "404":
-          description: Repository not found
-          schema:
-            type: string
-      security:
-      - BearerAuth: []
-      summary: Get tokenized file diff
-      tags:
-      - repositories
   /api/repos/{id}/files:
+    get:
+      description: Get the file tree for a repository at a specific path
+      parameters:
+      - description: Repository ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Directory path (optional)
+        in: query
+        name: path
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.RepoDirectoryListing'
+      security:
+      - BearerAuth: []
+      summary: Get file tree
+      tags:
+      - repositories
+  /api/repos/{id}/files/{filepath}:
     get:
       description: Read the content of a file in a repository
       parameters:
@@ -1264,37 +984,6 @@ paths:
       security:
       - BearerAuth: []
       summary: Save file content
-      tags:
-      - repositories
-  /api/repos/{id}/generate-commit-message:
-    post:
-      consumes:
-      - application/json
-      description: Generate a commit message using AI based on staged changes
-      parameters:
-      - description: Repository ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.GenerateCommitMessageResponse'
-        "400":
-          description: Bad request
-          schema:
-            type: string
-        "429":
-          description: Too many requests
-          schema:
-            type: string
-      security:
-      - BearerAuth: []
-      summary: Generate commit message
       tags:
       - repositories
   /api/repos/{id}/pull:
@@ -1374,137 +1063,30 @@ paths:
       summary: Force push to remote
       tags:
       - repositories
-  /api/repos/{id}/settings:
-    get:
-      description: Get all settings for a repository
+  /api/repos/{id}/stage-all:
+    post:
+      description: Stage all modified files
       parameters:
       - description: Repository ID
         in: path
         name: id
         required: true
         type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.RepoSettings'
-        "404":
-          description: Repository not found
-          schema:
-            type: string
-      security:
-      - BearerAuth: []
-      summary: Get repository settings
-      tags:
-      - repositories
-  /api/repos/{id}/settings/commit:
-    put:
-      consumes:
-      - application/json
-      description: Update commit settings for the repository
-      parameters:
-      - description: Repository ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Request body
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/models.RepoCommitSettings'
       responses:
         "200":
           description: Success
           schema:
             type: string
-        "400":
-          description: Bad request
-          schema:
-            type: string
         "404":
           description: Repository not found
           schema:
             type: string
       security:
       - BearerAuth: []
-      summary: Update commit settings
+      summary: Stage all files
       tags:
       - repositories
-  /api/repos/{id}/settings/identity:
-    put:
-      consumes:
-      - application/json
-      description: Update Git identity settings for the repository
-      parameters:
-      - description: Repository ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Request body
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/models.RepoIdentitySettings'
-      responses:
-        "200":
-          description: Success
-          schema:
-            type: string
-        "400":
-          description: Bad request
-          schema:
-            type: string
-        "404":
-          description: Repository not found
-          schema:
-            type: string
-      security:
-      - BearerAuth: []
-      summary: Update identity settings
-      tags:
-      - repositories
-  /api/repos/{id}/settings/sync:
-    put:
-      consumes:
-      - application/json
-      description: Update sync settings for the repository
-      parameters:
-      - description: Repository ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Request body
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/models.RepoSyncSettings'
-      responses:
-        "200":
-          description: Success
-          schema:
-            type: string
-        "400":
-          description: Bad request
-          schema:
-            type: string
-        "404":
-          description: Repository not found
-          schema:
-            type: string
-      security:
-      - BearerAuth: []
-      summary: Update sync settings
-      tags:
-      - repositories
-  /api/repos/{id}/stage:
+  /api/repos/{id}/stage/{filepath}:
     delete:
       description: Unstage a file from the index
       parameters:
@@ -1557,29 +1139,6 @@ paths:
       security:
       - BearerAuth: []
       summary: Stage a file
-      tags:
-      - repositories
-  /api/repos/{id}/stage-all:
-    post:
-      description: Stage all modified files
-      parameters:
-      - description: Repository ID
-        in: path
-        name: id
-        required: true
-        type: string
-      responses:
-        "200":
-          description: Success
-          schema:
-            type: string
-        "404":
-          description: Repository not found
-          schema:
-            type: string
-      security:
-      - BearerAuth: []
-      summary: Stage all files
       tags:
       - repositories
   /api/repos/{id}/status:
